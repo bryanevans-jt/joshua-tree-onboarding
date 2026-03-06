@@ -84,7 +84,8 @@ export function OnboardingFlow({ token, state, position }: OnboardingFlowProps) 
   function confirmCurrentAndGoTo(stepId: string) {
     const step = STEPS.find((s) => s.id === currentStepId);
     if (step && isStepComplete(step)) {
-      const next = new Set([...confirmedStepIds, currentStepId]);
+      const next = new Set(confirmedStepIds);
+      next.add(currentStepId);
       setConfirmedStepIds(next);
       persistConfirmed(next);
     }
@@ -101,7 +102,7 @@ export function OnboardingFlow({ token, state, position }: OnboardingFlowProps) 
         signatures,
         uploads,
         formData,
-        confirmedStepIds: [...ids],
+        confirmedStepIds: Array.from(ids),
       }),
     }).catch(() => {});
   }
@@ -115,7 +116,8 @@ export function OnboardingFlow({ token, state, position }: OnboardingFlowProps) 
     if (stepId === currentStepId) return;
     const step = STEPS.find((s) => s.id === currentStepId);
     if (step && isStepComplete(step)) {
-      const next = new Set([...confirmedStepIds, currentStepId]);
+      const next = new Set(confirmedStepIds);
+      next.add(currentStepId);
       setConfirmedStepIds(next);
       persistConfirmed(next);
     }
