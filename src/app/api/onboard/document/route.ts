@@ -35,7 +35,8 @@ export async function GET(request: Request) {
   if (!buf) {
     return NextResponse.json({ error: 'Template not found' }, { status: 404 });
   }
-  return new NextResponse(buf, {
+  const body = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+  return new NextResponse(body, {
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': 'inline',
