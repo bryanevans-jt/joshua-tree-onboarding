@@ -1,10 +1,16 @@
 import Link from 'next/link';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth-options';
+import AdminNav from './AdminNav';
 
-export default function AdminLayout({
+export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const session = await getServerSession(authOptions);
+  const email = session?.user?.email ?? null;
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="border-b border-gray-200 bg-white">
@@ -12,17 +18,7 @@ export default function AdminLayout({
           <Link href="/admin" className="font-semibold text-gray-900">
             Joshua Tree – Admin
           </Link>
-          <nav className="flex gap-4">
-            <Link href="/admin" className="text-gray-600 hover:text-gray-900">
-              Generate link
-            </Link>
-            <Link href="/admin/settings" className="text-gray-600 hover:text-gray-900">
-              Settings
-            </Link>
-            <Link href="/admin/documents" className="text-gray-600 hover:text-gray-900">
-              Documents
-            </Link>
-          </nav>
+          <AdminNav userEmail={email} />
         </div>
       </header>
       <main className="mx-auto max-w-6xl p-6">{children}</main>

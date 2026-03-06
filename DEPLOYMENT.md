@@ -12,11 +12,12 @@ The app is set up to run on **Vercel** with **Supabase** for the database and te
    - **service_role** key (under "Project API keys") → `SUPABASE_SERVICE_ROLE_KEY`  
      (Keep this secret; it’s server-only.)
 
-### 2. Run the database migration
+### 2. Run the database migrations
 
-In Supabase: **SQL Editor** → New query. Paste the contents of  
-`supabase/migrations/20250227000000_initial.sql` and run it.  
-This creates the `onboarding_links` and `app_settings` tables.
+In Supabase: **SQL Editor** → New query. Run each migration file in order:
+
+1. `supabase/migrations/20250227000000_initial.sql` — creates `onboarding_links` and `app_settings`.
+2. `supabase/migrations/20250227100000_approved_admins.sql` — creates `approved_admins` (for admin access list).
 
 ### 3. Storage bucket
 
@@ -32,10 +33,18 @@ The app creates a Storage bucket named **`templates`** automatically on the firs
    |------|--------|
    | `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL |
    | `SUPABASE_SERVICE_ROLE_KEY` | Your Supabase service_role key |
+   | `GOOGLE_CLIENT_ID` | Google OAuth 2.0 Client ID (for admin sign-in) |
+   | `GOOGLE_CLIENT_SECRET` | Google OAuth 2.0 Client secret |
+   | `NEXTAUTH_SECRET` | Random string (e.g. `openssl rand -base64 32`) |
+   | `NEXTAUTH_URL` | Your app URL (e.g. `https://your-app.vercel.app`) |
    | `GMAIL_USER` | Gmail/Workspace account that sends mail (the one with the App Password) |
    | `GMAIL_APP_PASSWORD` | Your Gmail App Password (16 characters) |
 
-3. Deploy (or redeploy after adding env vars).
+   **Google OAuth (admin sign-in):** In [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials → Create Credentials → OAuth client ID → Web application. Add authorized redirect URI: `https://your-app.vercel.app/api/auth/callback/google` (and `http://localhost:3000/api/auth/callback/google` for local dev).
+
+3. **Optional – prevent Supabase pausing:** Add **`CRON_SECRET`** (e.g. `openssl rand -hex 32`). The app has a keep-alive route at `/api/cron/keep-alive` that runs one tiny Supabase query. **If you have Vercel Pro:** Cron is in `vercel.json` (runs ~every 6 days); Vercel sends `Authorization: Bearer <CRON_SECRET>`. **If you’re on Vercel Hobby (free):** Use a free external cron (e.g. [cron-job.org](https://cron-job.org)) to request `GET https://your-app.vercel.app/api/cron/keep-alive` every 6 days with header `Authorization: Bearer YOUR_CRON_SECRET`.
+
+4. Deploy (or redeploy after adding env vars).
 
 ### 5. After first deploy
 
@@ -68,7 +77,7 @@ You can still deploy to Railway, Render, or a VPS **without** Supabase:
 | Step | Done |
 |------|------|
 | Supabase project created; migration SQL run | |
-| Vercel env vars set (Supabase URL + service_role key, Gmail user + App Password) | |
+| Vercel env vars set (Supabase, OAuth, NextAuth, Gmail; optional CRON_SECRET) | |
 | After deploy: Admin → Settings (HR, Comms, From email) | |
 | After deploy: Admin → Documents (upload all templates) | |
 | Test: generate link, complete onboarding, confirm emails | |
