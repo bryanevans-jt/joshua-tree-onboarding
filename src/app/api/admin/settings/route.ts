@@ -13,6 +13,14 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
+  return updateSettingsHandler(request);
+}
+
+export async function POST(request: Request) {
+  return updateSettingsHandler(request);
+}
+
+async function updateSettingsHandler(request: Request) {
   try {
     const body = await request.json();
     const settings = await updateSettings({
