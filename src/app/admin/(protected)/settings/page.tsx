@@ -12,7 +12,15 @@ export default function AdminSettingsPage() {
 
   useEffect(() => {
     fetch('/api/admin/settings')
-      .then((r) => r.json())
+      .then(async (r) => {
+        const text = await r.text();
+        if (!text) return {};
+        try {
+          return JSON.parse(text);
+        } catch {
+          return {};
+        }
+      })
       .then((data) => {
         setHrEmail(data.hrDirectorEmail ?? '');
         setCommEmail(data.communicationsDirectorEmail ?? '');
@@ -37,8 +45,16 @@ export default function AdminSettingsPage() {
           companyName: companyName,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'Failed to save');
+      const text = await res.text();
+      let data: { error?: string } = {};
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { error: text || `Server error (${res.status})` };
+        }
+      }
+      if (!res.ok) throw new Error(data?.error || `Failed to save (${res.status})`);
       setSaved(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to save settings');
