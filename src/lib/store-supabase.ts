@@ -111,28 +111,48 @@ export async function getSettings(): Promise<AppSettings> {
     .from('app_settings')
     .select('*')
     .eq('id', 1)
-    .single();
+    .maybeSingle();
   if (error) throw new Error(error.message);
+  if (!data) {
+    return {
+      hrDirectorEmail: '',
+      communicationsDirectorEmail: '',
+      fromEmail: undefined,
+      companyName: 'Joshua Tree Service Group',
+    };
+  }
   return {
-    hrDirectorEmail: data?.hr_director_email ?? '',
-    communicationsDirectorEmail: data?.communications_director_email ?? '',
-    fromEmail: data?.from_email ?? undefined,
-    companyName: data?.company_name ?? 'Joshua Tree Service Group',
+    hrDirectorEmail: data.hr_director_email ?? '',
+    communicationsDirectorEmail: data.communications_director_email ?? '',
+    fromEmail: data.from_email ?? undefined,
+    companyName: data.company_name ?? 'Joshua Tree Service Group',
   };
 }
 
 export async function updateSettings(updates: Partial<AppSettings>): Promise<AppSettings> {
   const supabase = getSupabase();
-  const body: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  if (updates.hrDirectorEmail !== undefined) body.hr_director_email = updates.hrDirectorEmail;
-  if (updates.communicationsDirectorEmail !== undefined)
-    body.communications_director_email = updates.communicationsDirectorEmail;
-  if (updates.fromEmail !== undefined) body.from_email = updates.fromEmail;
-  if (updates.companyName !== undefined) body.company_name = updates.companyName;
+  let existing: AppSettings;
+  try {
+    existing = await getSettings();
+  } catch {
+    existing = {
+      hrDirectorEmail: '',
+      communicationsDirectorEmail: '',
+      companyName: 'Joshua Tree Service Group',
+    };
+  }
+  const row = {
+    id: 1,
+    hr_director_email: updates.hrDirectorEmail ?? existing.hrDirectorEmail,
+    communications_director_email:
+      updates.communicationsDirectorEmail ?? existing.communicationsDirectorEmail,
+    from_email: updates.fromEmail !== undefined ? updates.fromEmail : existing.fromEmail ?? null,
+    company_name: updates.companyName ?? existing.companyName,
+    updated_at: new Date().toISOString(),
+  };
   const { data, error } = await supabase
     .from('app_settings')
-    .update(body)
-    .eq('id', 1)
+    .upsert(row, { onConflict: 'id' })
     .select()
     .single();
   if (error) throw new Error(error.message);

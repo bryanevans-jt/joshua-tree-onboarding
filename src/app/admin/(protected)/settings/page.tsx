@@ -37,10 +37,11 @@ export default function AdminSettingsPage() {
           companyName: companyName,
         }),
       });
-      if (!res.ok) throw new Error('Failed to save');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Failed to save');
       setSaved(true);
-    } catch {
-      setError('Failed to save settings');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to save settings');
     }
   }
 
