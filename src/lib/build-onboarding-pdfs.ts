@@ -8,8 +8,11 @@ import { FINGERPRINT_FORM_BY_STATE } from './config';
 import type { State } from './config';
 import {
   stampSignatureOnPdf,
-  getDefaultSignaturePlacement,
+  resolveSignaturePlacement,
+  getGaFingerprintSignaturePlacements,
   createPdfFromImage,
+  fillPdfForm,
+  type PdfFormValues,
 } from './pdf';
 
 export interface Attachment {
@@ -45,10 +48,12 @@ export interface BuildPdfInputs {
   position: string;
   signatures: Record<string, string>;
   uploads: Record<string, string>;
+  /** Per-step form field values for fillable PDFs (stepId -> fieldName -> value). */
+  formData?: Record<string, PdfFormValues>;
 }
 
 export async function buildHrAttachments(inputs: BuildPdfInputs): Promise<Attachment[]> {
-  const { state, position, signatures, uploads } = inputs;
+  const { state, position, signatures, uploads, formData } = inputs;
   const attachments: Attachment[] = [];
 
   for (const [stepId, getTemplateKey] of Object.entries(SIGNED_STEP_TO_TEMPLATE_KEY)) {
@@ -57,16 +62,40 @@ export async function buildHrAttachments(inputs: BuildPdfInputs): Promise<Attach
     const templateBuf = await readTemplate(templateKey);
     if (!templateBuf || !sig) continue;
 
-    const arrayBuf = templateBuf.buffer.slice(
+    let arrayBuf = templateBuf.buffer.slice(
       templateBuf.byteOffset,
       templateBuf.byteOffset + templateBuf.byteLength
     ) as ArrayBuffer;
-    const placement = await getDefaultSignaturePlacement(arrayBuf);
-    const pdfBytes = await stampSignatureOnPdf(
-      arrayBuf,
-      sig,
-      placement
-    );
+
+    const stepFormValues = formData?.[stepId];
+    if (stepFormValues && Object.keys(stepFormValues).length > 0) {
+      const filled = await fillPdfForm(arrayBuf, stepFormValues);
+      arrayBuf = filled.buffer.slice(
+        filled.byteOffset,
+        filled.byteOffset + filled.byteLength
+      ) as ArrayBuffer;
+    }
+
+    let pdfBytes: Uint8Array;
+    const isGaFingerprint = stepId === 'fingerprint' && state === 'Georgia';
+    if (isGaFingerprint) {
+      const placements = await getGaFingerprintSignaturePlacements(arrayBuf);
+      if (placements && placements.length === 2) {
+        const afterFirst = await stampSignatureOnPdf(arrayBuf, sig, placements[0]);
+        const buf = afterFirst.buffer.slice(
+          afterFirst.byteOffset,
+          afterFirst.byteOffset + afterFirst.byteLength
+        ) as ArrayBuffer;
+        pdfBytes = await stampSignatureOnPdf(buf, sig, placements[1]);
+      } else {
+        const placement = await resolveSignaturePlacement(arrayBuf, { stepId, state });
+        pdfBytes = await stampSignatureOnPdf(arrayBuf, sig, placement);
+      }
+    } else {
+      const placement = await resolveSignaturePlacement(arrayBuf, { stepId, state });
+      pdfBytes = await stampSignatureOnPdf(arrayBuf, sig, placement);
+    }
+
     const name = SIGNED_STEP_NAMES[stepId] ?? stepId;
     attachments.push({
       filename: `${name}.pdf`,

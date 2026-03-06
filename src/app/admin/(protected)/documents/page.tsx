@@ -16,6 +16,7 @@ const SHARED_DOCS: { key: string; label: string }[] = [
 
 export default function AdminDocumentsPage() {
   const [uploaded, setUploaded] = useState<string[]>([]);
+  const [fileNames, setFileNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
@@ -55,6 +56,9 @@ export default function AdminDocumentsPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed');
+      const savedKey = data.key ?? id;
+      setUploaded((prev) => (prev.includes(savedKey) ? prev : [...prev, savedKey]));
+      setFileNames((prev) => ({ ...prev, [savedKey]: file.name }));
       setMessage({ type: 'success', text: 'File uploaded successfully.' });
       loadList();
     } catch (e) {
@@ -108,7 +112,9 @@ export default function AdminDocumentsPage() {
                   <span
                     className={`ml-2 text-sm ${uploaded.includes(key) ? 'text-teal-600' : 'text-amber-600'}`}
                   >
-                    {uploaded.includes(key) ? 'Uploaded' : 'Not uploaded'}
+                    {uploaded.includes(key)
+                      ? fileNames[key] || 'Uploaded'
+                      : 'Not uploaded'}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -149,7 +155,9 @@ export default function AdminDocumentsPage() {
                     <span
                       className={`ml-2 text-sm ${uploaded.includes(key) ? 'text-teal-600' : 'text-amber-600'}`}
                     >
-                      {uploaded.includes(key) ? 'Uploaded' : 'Not uploaded'}
+                      {uploaded.includes(key)
+                        ? fileNames[key] || 'Uploaded'
+                        : 'Not uploaded'}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">

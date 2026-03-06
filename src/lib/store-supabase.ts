@@ -88,6 +88,8 @@ export async function saveProgress(
     newHireName: progress.newHireName ?? link.progress?.newHireName,
     signatures: { ...link.progress?.signatures, ...(progress.signatures ?? {}) },
     uploads: { ...link.progress?.uploads, ...(progress.uploads ?? {}) },
+    confirmedStepIds: progress.confirmedStepIds ?? link.progress?.confirmedStepIds,
+    formData: { ...link.progress?.formData, ...(progress.formData ?? {}) },
   };
   const supabase = getSupabase();
   const { data, error } = await supabase

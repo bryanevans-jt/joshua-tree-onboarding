@@ -5,6 +5,10 @@ export interface OnboardingProgressData {
   newHireName?: string;
   signatures?: Record<string, string>;
   uploads?: Record<string, string>;
+  /** Step ids the user has advanced past (so checklist shows a check) */
+  confirmedStepIds?: string[];
+  /** Per-step form field values for fillable PDFs (stepId -> fieldName -> value). */
+  formData?: Record<string, Record<string, string | boolean>>;
 }
 
 export interface OnboardingLink {

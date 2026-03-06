@@ -6,7 +6,7 @@ import { sendEmail } from '@/lib/email';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { token, newHireName, state, position, signatures, uploads } = body;
+    const { token, newHireName, state, position, signatures, uploads, formData } = body;
     if (!token) {
       return NextResponse.json({ error: 'token required' }, { status: 400 });
     }
@@ -37,6 +37,7 @@ export async function POST(request: Request) {
       position,
       signatures: signatures ?? {},
       uploads: uploads ?? {},
+      formData: formData ?? undefined,
     });
 
     if (settings.hrDirectorEmail && hrAttachments.length > 0) {
