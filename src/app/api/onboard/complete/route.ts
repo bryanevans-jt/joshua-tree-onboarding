@@ -24,7 +24,16 @@ export async function POST(request: Request) {
       newHireName: newHireName || undefined,
     });
 
-    const settings = await getSettings();
+    let settings: Awaited<ReturnType<typeof getSettings>>;
+    try {
+      settings = await getSettings();
+    } catch (settingsErr) {
+      console.error('[onboard/complete] getSettings failed:', settingsErr);
+      return NextResponse.json(
+        { error: 'Server configuration error. Please contact HR.' },
+        { status: 500 }
+      );
+    }
     const subject = `Onboarding: ${newHireName || 'New hire'} – ${position} – ${state}`;
     const fromEmail =
       settings.fromEmail ||
@@ -32,13 +41,20 @@ export async function POST(request: Request) {
       process.env.GMAIL_USER ||
       '';
 
-    const hrAttachments = await buildHrAttachments({
-      state,
-      position,
-      signatures: signatures ?? {},
-      uploads: uploads ?? {},
-      formData: formData ?? undefined,
-    });
+    let hrAttachments: Awaited<ReturnType<typeof buildHrAttachments>>;
+    try {
+      hrAttachments = await buildHrAttachments({
+        state,
+        position,
+        signatures: signatures ?? {},
+        uploads: uploads ?? {},
+        formData: formData ?? undefined,
+      });
+    } catch (buildErr) {
+      console.error('[onboard/complete] buildHrAttachments failed:', buildErr);
+      const msg = buildErr instanceof Error ? buildErr.message : 'Failed to build PDFs';
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
 
     if (settings.hrDirectorEmail && hrAttachments.length > 0) {
       const result = await sendEmail(

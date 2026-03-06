@@ -28,3 +28,25 @@ body {
     @apply rounded-xl border border-gray-200 bg-white p-6 shadow-sm;
   }
 }
+
+/* PDF.js annotation layer: form fields inside the viewer */
+.annotationLayer input[type="text"],
+.annotationLayer input[type="password"],
+.annotationLayer textarea,
+.annotationLayer select {
+  font: inherit;
+  padding: 2px 4px;
+  border: 1px solid #999;
+  background: rgba(255, 255, 255, 0.9);
+  color: #1a1a1a;
+}
+.annotationLayer input[type="checkbox"] {
+  width: 1em;
+  height: 1em;
+  margin: 0;
+  vertical-align: middle;
+}
+.annotationLayer .buttonWidgetAnnotation.pushButton {
+  padding: 4px 8px;
+  font: inherit;
+}
