@@ -29,7 +29,7 @@ export const PdfFormViewer = React.forwardRef<PdfFormViewerRef, PdfFormViewerPro
       const storage = doc.annotationStorage;
       const all = storage.getAll();
       if (all == null) return result;
-      const allMap = all instanceof Map ? Object.fromEntries(all.entries()) : all as Record<string, { value?: unknown }>;
+      const allMap = all instanceof Map ? Object.fromEntries(all.entries()) : all as Record<string, { value?: unknown; textContent?: unknown }>;
 
       const numPages = doc.numPages;
       for (let i = 1; i <= numPages; i++) {
@@ -38,10 +38,11 @@ export const PdfFormViewer = React.forwardRef<PdfFormViewerRef, PdfFormViewerPro
         for (const ann of annotations) {
           const id = (ann as { id?: string }).id;
           const fieldName = (ann as { fieldName?: string }).fieldName;
-          if (!id || !fieldName) continue;
-          const stored = allMap[id];
+          if (id == null || !fieldName) continue;
+          const key = String(id);
+          const stored = allMap[key];
           if (stored === undefined) continue;
-          const val = (stored as { value?: unknown }).value;
+          const val = (stored as { value?: unknown }).value ?? (stored as { textContent?: unknown }).textContent;
           if (typeof val === 'boolean') result[fieldName] = val;
           else if (typeof val === 'string') result[fieldName] = val;
           else if (val !== undefined && val !== null) result[fieldName] = String(val);
@@ -162,6 +163,8 @@ export const PdfFormViewer = React.forwardRef<PdfFormViewerRef, PdfFormViewerPro
                   enableScripting: false,
                 });
                 annLayerDiv.style.pointerEvents = 'auto';
+                annLayerDiv.style.width = `${viewport.width}px`;
+                annLayerDiv.style.height = `${viewport.height}px`;
               }
             }
 

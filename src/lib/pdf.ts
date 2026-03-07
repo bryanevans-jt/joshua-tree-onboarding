@@ -264,9 +264,34 @@ function inferFieldType(field: { constructor: { name: string } }): PdfFormFieldI
 /** Form values we can apply: text for text fields, boolean for checkboxes. */
 export type PdfFormValues = Record<string, string | boolean>;
 
+/** Normalize a field name for matching (trim, collapse spaces, lowercase). */
+function normalizeFieldName(s: string): string {
+  return s.replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+/**
+ * Find the best-matching PDF form field name for a given value key.
+ * Tries exact match, then case-insensitive normalized, then "ends with" (qualified names).
+ */
+function findFieldNameForValue(
+  valueKey: string,
+  fieldNames: string[]
+): string | undefined {
+  if (fieldNames.includes(valueKey)) return valueKey;
+  const keyNorm = normalizeFieldName(valueKey);
+  for (const name of fieldNames) {
+    const nameNorm = normalizeFieldName(name);
+    if (nameNorm === keyNorm) return name;
+    if (nameNorm.endsWith('.' + keyNorm) || nameNorm.endsWith(keyNorm)) return name;
+  }
+  return undefined;
+}
+
 /**
  * Fill PDF form fields with the given values, then return the modified PDF bytes.
  * Skips signature fields and unknown types. For checkboxes, true = check, false = uncheck.
+ * Matches value keys to field names by exact match, then case-insensitive normalized match
+ * (PDF.js viewer and pdf-lib can use slightly different names).
  */
 export async function fillPdfForm(
   pdfBytes: ArrayBuffer,
@@ -275,21 +300,24 @@ export async function fillPdfForm(
   const pdfDoc = await PDFDocument.load(pdfBytes);
   const form = pdfDoc.getForm();
   const fields = form.getFields();
+  const fieldNames = fields.map((f) => f.getName());
 
-  for (const field of fields) {
-    const name = field.getName();
-    const val = values[name];
-    if (val === undefined) continue;
+  for (const valueKey of Object.keys(values)) {
+    const val = values[valueKey];
+    const name = findFieldNameForValue(valueKey, fieldNames);
+    if (name === undefined) continue;
 
-    const type = inferFieldType(field);
+    const type = inferFieldType(
+      fields[fieldNames.indexOf(name)] as { constructor: { name: string } }
+    );
     try {
       if (type === 'text' && typeof val === 'string') {
         form.getTextField(name).setText(val);
       } else if (type === 'checkbox' && typeof val === 'boolean') {
         const cb = form.getCheckBox(name);
-        if (val) cb.check(); else cb.uncheck();
+        if (val) cb.check();
+        else cb.uncheck();
       }
-      // radio/dropdown/optionlist could be added later with string value
     } catch {
       // field might be read-only or wrong type; skip
     }
