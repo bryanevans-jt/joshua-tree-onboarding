@@ -52,6 +52,18 @@ export const PdfFormViewer = React.forwardRef<PdfFormViewerRef, PdfFormViewerPro
 
     React.useImperativeHandle(ref, () => ({ getFormData }), [getFormData]);
 
+    // Set PDF.js worker once on mount so it's ready before any getDocument() call
+    const workerSetRef = useRef(false);
+    useEffect(() => {
+      if (workerSetRef.current || typeof window === 'undefined') return;
+      workerSetRef.current = true;
+      import('pdfjs-dist').then((pdfjsLib) => {
+        if (pdfjsLib.GlobalWorkerOptions) {
+          pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+        }
+      });
+    }, []);
+
     useEffect(() => {
       if (!pdfUrl || !containerRef.current) return;
       setLoading(true);
@@ -66,8 +78,8 @@ export const PdfFormViewer = React.forwardRef<PdfFormViewerRef, PdfFormViewerPro
           const arrayBuffer = await res.arrayBuffer();
 
           const pdfjsLib = await import('pdfjs-dist');
-          if (typeof window !== 'undefined' && pdfjsLib.GlobalWorkerOptions?.workerSrc === undefined) {
-            pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+          if (typeof window !== 'undefined' && pdfjsLib.GlobalWorkerOptions) {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
           }
 
           const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
