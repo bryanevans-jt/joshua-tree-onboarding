@@ -97,6 +97,7 @@ export const PdfFormViewer = React.forwardRef<PdfFormViewerRef, PdfFormViewerPro
             const pageDiv = document.createElement('div');
             pageDiv.className = 'pdf-page mb-4';
             pageDiv.style.position = 'relative';
+            pageDiv.style.setProperty('--scale-factor', String(scale));
 
             const canvas = document.createElement('canvas');
             const context = canvas.getContext('2d');
@@ -119,10 +120,25 @@ export const PdfFormViewer = React.forwardRef<PdfFormViewerRef, PdfFormViewerPro
               annLayerDiv.style.position = 'absolute';
               annLayerDiv.style.left = '0';
               annLayerDiv.style.top = '0';
-              annLayerDiv.style.width = `${viewport.width}px`;
-              annLayerDiv.style.height = `${viewport.height}px`;
               annLayerDiv.style.pointerEvents = 'none';
               pageDiv.appendChild(annLayerDiv);
+
+              const linkService = {
+                externalLinkTarget: 2,
+                addLinkAttributes(link: HTMLElement, url: string, newWindow: boolean) {
+                  if (link instanceof HTMLAnchorElement) {
+                    link.href = url;
+                    link.target = newWindow ? '_blank' : '_self';
+                    link.rel = 'noopener noreferrer nofollow';
+                  }
+                },
+                getDestinationHash() { return ''; },
+                getAnchorUrl() { return '#'; },
+                goToDestination() {},
+                executeNamedAction() {},
+                executeSetOCGState() {},
+                eventBus: undefined as unknown as { dispatch: (name: string, detail: unknown) => void },
+              };
 
               const AnnotationLayerClass = (pdfjsLib as { AnnotationLayer?: new (p: unknown) => { render: (p: unknown) => Promise<void> } }).AnnotationLayer;
               if (AnnotationLayerClass) {
@@ -138,7 +154,7 @@ export const PdfFormViewer = React.forwardRef<PdfFormViewerRef, PdfFormViewerPro
                   div: annLayerDiv,
                   annotations,
                   page,
-                  linkService: { externalLinkTarget: 2 },
+                  linkService,
                   downloadManager: null,
                   annotationStorage: pdfDocument.annotationStorage,
                   imageResourcesPath: '',

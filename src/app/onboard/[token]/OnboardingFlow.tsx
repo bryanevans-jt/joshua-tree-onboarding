@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { SignaturePad } from '@/components/SignaturePad';
 import { PdfFormViewer, type PdfFormViewerRef } from '@/components/PdfFormViewer';
+import { compressSignatureDataUrl, compressUploadDataUrl } from '@/lib/compress-image';
 
 const STEPS = [
   { id: 'name', title: 'Your name', type: 'text' as const },
@@ -189,8 +190,9 @@ export function OnboardingFlow({ token, state, position }: OnboardingFlowProps) 
     persistProgress();
   }
 
-  function handleSignatureAccept(stepId: string, dataUrl: string) {
-    const next = { ...signatures, [stepId]: dataUrl };
+  async function handleSignatureAccept(stepId: string, dataUrl: string) {
+    const compressed = await compressSignatureDataUrl(dataUrl).catch(() => dataUrl);
+    const next = { ...signatures, [stepId]: compressed };
     setSignatures(next);
     fetch('/api/onboard/progress', {
       method: 'PUT',
@@ -199,8 +201,11 @@ export function OnboardingFlow({ token, state, position }: OnboardingFlowProps) 
     }).catch(() => {});
   }
 
-  function handleUploadChange(stepId: string, dataUrl: string) {
-    const next = { ...uploads, [stepId]: dataUrl };
+  async function handleUploadChange(stepId: string, dataUrl: string) {
+    const compressed = dataUrl.startsWith('data:image/')
+      ? await compressUploadDataUrl(dataUrl).catch(() => dataUrl)
+      : dataUrl;
+    const next = { ...uploads, [stepId]: compressed };
     setUploads(next);
     fetch('/api/onboard/progress', {
       method: 'PUT',
