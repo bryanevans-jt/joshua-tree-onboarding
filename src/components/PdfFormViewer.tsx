@@ -12,10 +12,12 @@ interface PdfFormViewerProps {
   pdfUrl: string;
   scale?: number;
   className?: string;
+  /** When false, only the PDF canvas is rendered (no annotation layer). Use with a separate form for reliable field values. */
+  renderFormOverlay?: boolean;
 }
 
 export const PdfFormViewer = React.forwardRef<PdfFormViewerRef, PdfFormViewerProps>(
-  function PdfFormViewer({ pdfUrl, scale = 1.25, className = '' }, ref) {
+  function PdfFormViewer({ pdfUrl, scale = 1.25, className = '', renderFormOverlay = true }, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -135,7 +137,7 @@ export const PdfFormViewer = React.forwardRef<PdfFormViewerRef, PdfFormViewerPro
               annotationMode: pdfjsLib.AnnotationMode?.ENABLE_FORMS ?? 1,
             }).promise;
 
-            const annotations = await page.getAnnotations({ intent: 'display' });
+            const annotations = renderFormOverlay ? await page.getAnnotations({ intent: 'display' }) : [];
             if (annotations.length > 0) {
               const annLayerDiv = document.createElement('div');
               annLayerDiv.className = 'annotationLayer';
@@ -202,7 +204,7 @@ export const PdfFormViewer = React.forwardRef<PdfFormViewerRef, PdfFormViewerPro
         }
       })();
       return () => abort.abort();
-    }, [pdfUrl, scale]);
+    }, [pdfUrl, scale, renderFormOverlay]);
 
     return (
       <div className={className}>

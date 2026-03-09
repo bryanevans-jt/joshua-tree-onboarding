@@ -52,6 +52,7 @@ export function OnboardingFlow({ token, state, position }: OnboardingFlowProps) 
   const [pdfZoom, setPdfZoom] = useState(100);
   const [status, setStatus] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle');
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [stepPdfFields, setStepPdfFields] = useState<Array<{ name: string; type: string }>>([]);
   const pdfViewerRef = useRef<PdfFormViewerRef>(null);
   const stepContentRef = useRef<HTMLDivElement>(null);
 
@@ -73,7 +74,7 @@ export function OnboardingFlow({ token, state, position }: OnboardingFlowProps) 
 
   async function confirmCurrentAndGoTo(stepId: string) {
     const step = STEPS.find((s) => s.id === currentStepId);
-    if (step?.type === 'sign' && pdfViewerRef.current) {
+    if (step?.type === 'sign' && stepPdfFields.length === 0 && pdfViewerRef.current) {
       try {
         const data = await pdfViewerRef.current.getFormData();
         if (Object.keys(data).length > 0) {
@@ -125,7 +126,7 @@ export function OnboardingFlow({ token, state, position }: OnboardingFlowProps) 
   async function handleChecklistClick(stepId: string) {
     if (stepId === currentStepId) return;
     const step = STEPS.find((s) => s.id === currentStepId);
-    if (step?.type === 'sign' && pdfViewerRef.current) {
+    if (step?.type === 'sign' && stepPdfFields.length === 0 && pdfViewerRef.current) {
       try {
         const data = await pdfViewerRef.current.getFormData();
         if (Object.keys(data).length > 0) {
@@ -171,6 +172,17 @@ export function OnboardingFlow({ token, state, position }: OnboardingFlowProps) 
   useEffect(() => {
     stepContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [currentStepId]);
+
+  useEffect(() => {
+    if (currentStep.type !== 'sign') {
+      setStepPdfFields([]);
+      return;
+    }
+    fetch(`/api/onboard/document-fields?token=${encodeURIComponent(token)}&step=${encodeURIComponent(currentStep.id)}`)
+      .then((r) => r.ok ? r.json() : { fields: [] })
+      .then((data) => setStepPdfFields(Array.isArray(data.fields) ? data.fields.filter((f: { type: string }) => f.type !== 'signature') : []))
+      .catch(() => setStepPdfFields([]));
+  }, [token, currentStep.id, currentStep.type]);
 
   useEffect(() => {
     fetch(`/api/onboard/progress?token=${encodeURIComponent(token)}`)
@@ -224,7 +236,7 @@ export function OnboardingFlow({ token, state, position }: OnboardingFlowProps) 
     setStatus('submitting');
     setSubmitError(null);
     let finalFormData = formData;
-    if (currentStep.type === 'sign' && pdfViewerRef.current) {
+    if (currentStep.type === 'sign' && stepPdfFields.length === 0 && pdfViewerRef.current) {
       try {
         const data = await pdfViewerRef.current.getFormData();
         finalFormData = { ...formData, [currentStep.id]: data };
@@ -359,7 +371,11 @@ export function OnboardingFlow({ token, state, position }: OnboardingFlowProps) 
               <p className="text-gray-700 font-medium shrink-0">{currentStep.title}</p>
               <div className="flex-1 flex flex-col min-h-0 rounded-lg border border-gray-200 bg-gray-50/50 overflow-hidden">
                 <div className="flex items-center justify-between gap-2 shrink-0 border-b border-gray-200 bg-white px-2 py-1.5">
-                  <span className="text-sm text-gray-500">Fill in form fields directly in the document below; your entries are saved when you click Next or Submit.</span>
+                  <span className="text-sm text-gray-500">
+                    {stepPdfFields.length > 0
+                      ? 'Review the document above; complete the form below and sign.'
+                      : 'Review the document below, then sign.'}
+                  </span>
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
@@ -386,9 +402,54 @@ export function OnboardingFlow({ token, state, position }: OnboardingFlowProps) 
                     pdfUrl={`/api/onboard/document?token=${encodeURIComponent(token)}&step=${encodeURIComponent(currentStep.id)}`}
                     scale={(pdfZoom / 100) * 1.25}
                     className="min-h-[400px]"
+                    renderFormOverlay={false}
                   />
                 </div>
               </div>
+              {stepPdfFields.length > 0 && (
+                <div className="card space-y-3">
+                  <p className="text-sm font-medium text-gray-700">Form fields — enter the information below; it will be applied to your PDF.</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {stepPdfFields.map((field) => {
+                      const stepForm = formData[currentStep.id] ?? {};
+                      const value = stepForm[field.name];
+                      const update = (v: string | boolean) => {
+                        const next = { ...formData, [currentStep.id]: { ...stepForm, [field.name]: v } };
+                        setFormData(next);
+                        fetch('/api/onboard/progress', {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ token, newHireName: name.trim() || undefined, signatures, uploads, formData: next }),
+                        }).catch(() => {});
+                      };
+                      if (field.type === 'checkbox') {
+                        return (
+                          <label key={field.name} className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={value === true}
+                              onChange={(e) => update(e.target.checked)}
+                              className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                            />
+                            <span className="text-sm text-gray-700">{field.name.replace(/_/g, ' ')}</span>
+                          </label>
+                        );
+                      }
+                      return (
+                        <div key={field.name}>
+                          <label className="mb-1 block text-sm text-gray-600">{field.name.replace(/_/g, ' ')}</label>
+                          <input
+                            type="text"
+                            value={typeof value === 'string' ? value : ''}
+                            onChange={(e) => update(e.target.value)}
+                            className="input-field"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               <p className="text-sm text-gray-500 shrink-0">
                 Sign in the box below using your mouse, touch, or signature pad.
               </p>
