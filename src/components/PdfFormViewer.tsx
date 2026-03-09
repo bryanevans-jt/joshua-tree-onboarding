@@ -23,30 +23,49 @@ export const PdfFormViewer = React.forwardRef<PdfFormViewerRef, PdfFormViewerPro
 
     const getFormData = useCallback(async (): Promise<PdfFormData> => {
       const doc = pdfDocRef.current;
-      if (!doc) return {};
-
+      const container = containerRef.current;
       const result: PdfFormData = {};
-      const storage = doc.annotationStorage;
-      const all = storage.getAll();
-      if (all == null) return result;
-      const allMap = all instanceof Map ? Object.fromEntries(all.entries()) : all as Record<string, { value?: unknown; textContent?: unknown }>;
 
-      const numPages = doc.numPages;
-      for (let i = 1; i <= numPages; i++) {
-        const page = await doc.getPage(i);
-        const annotations = await page.getAnnotations({ intent: 'display' });
-        for (const ann of annotations) {
-          const id = (ann as { id?: string }).id;
-          const fieldName = (ann as { fieldName?: string }).fieldName;
-          if (id == null || !fieldName) continue;
-          const key = String(id);
-          const stored = allMap[key];
-          if (stored === undefined) continue;
-          const val = (stored as { value?: unknown }).value ?? (stored as { textContent?: unknown }).textContent;
-          if (typeof val === 'boolean') result[fieldName] = val;
-          else if (typeof val === 'string') result[fieldName] = val;
-          else if (val !== undefined && val !== null) result[fieldName] = String(val);
+      if (doc?.annotationStorage) {
+        const storage = doc.annotationStorage;
+        const all = storage.getAll();
+        if (all != null) {
+          const allMap = all instanceof Map ? Object.fromEntries(all.entries()) : all as Record<string, { value?: unknown; textContent?: unknown }>;
+          const numPages = doc.numPages;
+          for (let i = 1; i <= numPages; i++) {
+            const page = await doc.getPage(i);
+            const annotations = await page.getAnnotations({ intent: 'display' });
+            for (const ann of annotations) {
+              const id = (ann as { id?: string }).id;
+              const fieldName = (ann as { fieldName?: string }).fieldName;
+              if (id == null || !fieldName) continue;
+              for (const key of [String(id), id]) {
+                const stored = allMap[key as string];
+                if (stored === undefined) continue;
+                const val = (stored as { value?: unknown }).value ?? (stored as { textContent?: unknown }).textContent;
+                if (typeof val === 'boolean') result[fieldName] = val;
+                else if (typeof val === 'string') result[fieldName] = val;
+                else if (val !== undefined && val !== null) result[fieldName] = String(val);
+                break;
+              }
+            }
+          }
         }
+      }
+
+      if (container) {
+        const inputs = container.querySelectorAll('.annotationLayer input, .annotationLayer textarea, .annotationLayer select');
+        inputs.forEach((el) => {
+          const input = el as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+          const name = input.getAttribute('name');
+          if (!name) return;
+          if (input.type === 'checkbox') {
+            result[name] = (input as HTMLInputElement).checked;
+          } else {
+            const v = 'value' in input ? input.value : (input as HTMLTextAreaElement).value;
+            if (v !== undefined && v !== null) result[name] = v;
+          }
+        });
       }
       return result;
     }, []);
@@ -99,6 +118,8 @@ export const PdfFormViewer = React.forwardRef<PdfFormViewerRef, PdfFormViewerPro
             pageDiv.className = 'pdf-page mb-4';
             pageDiv.style.position = 'relative';
             pageDiv.style.setProperty('--scale-factor', String(scale));
+            pageDiv.style.width = `${viewport.width}px`;
+            pageDiv.style.height = `${viewport.height}px`;
 
             const canvas = document.createElement('canvas');
             const context = canvas.getContext('2d');
@@ -121,7 +142,10 @@ export const PdfFormViewer = React.forwardRef<PdfFormViewerRef, PdfFormViewerPro
               annLayerDiv.style.position = 'absolute';
               annLayerDiv.style.left = '0';
               annLayerDiv.style.top = '0';
+              annLayerDiv.style.width = '100%';
+              annLayerDiv.style.height = '100%';
               annLayerDiv.style.pointerEvents = 'none';
+              annLayerDiv.style.boxSizing = 'border-box';
               pageDiv.appendChild(annLayerDiv);
 
               const linkService = {
@@ -163,8 +187,8 @@ export const PdfFormViewer = React.forwardRef<PdfFormViewerRef, PdfFormViewerPro
                   enableScripting: false,
                 });
                 annLayerDiv.style.pointerEvents = 'auto';
-                annLayerDiv.style.width = `${viewport.width}px`;
-                annLayerDiv.style.height = `${viewport.height}px`;
+                annLayerDiv.style.width = '100%';
+                annLayerDiv.style.height = '100%';
               }
             }
 

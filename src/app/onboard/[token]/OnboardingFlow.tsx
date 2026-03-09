@@ -53,6 +53,7 @@ export function OnboardingFlow({ token, state, position }: OnboardingFlowProps) 
   const [status, setStatus] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle');
   const [submitError, setSubmitError] = useState<string | null>(null);
   const pdfViewerRef = useRef<PdfFormViewerRef>(null);
+  const stepContentRef = useRef<HTMLDivElement>(null);
 
   const isStepComplete = useCallback(
     (step: (typeof STEPS)[number]) => {
@@ -166,6 +167,10 @@ export function OnboardingFlow({ token, state, position }: OnboardingFlowProps) 
       }),
     }).catch(() => {});
   }, [token, name, signatures, uploads, formData]);
+
+  useEffect(() => {
+    stepContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [currentStepId]);
 
   useEffect(() => {
     fetch(`/api/onboard/progress?token=${encodeURIComponent(token)}`)
@@ -332,7 +337,7 @@ export function OnboardingFlow({ token, state, position }: OnboardingFlowProps) 
       </aside>
 
       {/* Right: current step content — full width */}
-      <div className="min-w-0 flex-1 flex flex-col">
+      <div ref={stepContentRef} className="min-w-0 flex-1 flex flex-col">
         <div className="flex flex-1 flex-col min-h-0">
           {currentStep.id === 'name' && (
             <div className="card space-y-4">
