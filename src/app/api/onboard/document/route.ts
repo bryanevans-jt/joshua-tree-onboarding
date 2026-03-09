@@ -36,10 +36,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Template not found' }, { status: 404 });
   }
   const body = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+  const download = searchParams.get('download') === '1' || searchParams.get('download') === 'true';
   return new NextResponse(body as unknown as BodyInit, {
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': 'inline',
+      'Content-Disposition': download ? 'attachment' : 'inline',
     },
   });
 }

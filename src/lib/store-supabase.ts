@@ -86,6 +86,9 @@ export async function saveProgress(
   if (!link) return undefined;
   const merged = {
     newHireName: progress.newHireName ?? link.progress?.newHireName,
+    uploadedDocumentKeys: progress.uploadedDocumentKeys !== undefined
+      ? (Object.keys(progress.uploadedDocumentKeys).length === 0 ? {} : { ...link.progress?.uploadedDocumentKeys, ...progress.uploadedDocumentKeys })
+      : (link.progress?.uploadedDocumentKeys ?? {}),
     signatures: { ...link.progress?.signatures, ...(progress.signatures ?? {}) },
     uploads: { ...link.progress?.uploads, ...(progress.uploads ?? {}) },
     confirmedStepIds: progress.confirmedStepIds ?? link.progress?.confirmedStepIds,

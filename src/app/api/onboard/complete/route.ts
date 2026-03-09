@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
-import { getLinkByToken, updateLink, getSettings } from '@/lib/store';
-import { buildHrAttachments, getHeadshotAttachment } from '@/lib/build-onboarding-pdfs';
+import { getLinkByToken, updateLink, getSettings, saveProgress } from '@/lib/store';
+import { buildAttachmentsFromUploads, splitAttachmentsForDelivery } from '@/lib/build-attachments-from-uploads';
+import { deleteAllDocumentsForLink } from '@/lib/onboarding-upload-storage';
 import { sendEmail } from '@/lib/email';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { token, newHireName, state, position, signatures, uploads, formData } = body;
+    const { token, newHireName } = body;
     if (!token) {
       return NextResponse.json({ error: 'token required' }, { status: 400 });
     }
@@ -24,6 +25,15 @@ export async function POST(request: Request) {
       newHireName: newHireName || undefined,
     });
 
+    const progress = link.progress;
+    const uploadedKeys = progress?.uploadedDocumentKeys ?? {};
+    if (Object.keys(uploadedKeys).length === 0) {
+      return NextResponse.json(
+        { error: 'No documents uploaded. Please upload all required documents.' },
+        { status: 400 }
+      );
+    }
+
     let settings: Awaited<ReturnType<typeof getSettings>>;
     try {
       settings = await getSettings();
@@ -34,35 +44,34 @@ export async function POST(request: Request) {
         { status: 500 }
       );
     }
-    const subject = `Onboarding: ${newHireName || 'New hire'} – ${position} – ${state}`;
+
+    const subject = `Onboarding: ${newHireName || 'New hire'} – ${link.position} – ${link.state}`;
     const fromEmail =
       settings.fromEmail ||
       settings.hrDirectorEmail ||
       process.env.GMAIL_USER ||
       '';
 
-    let hrAttachments: Awaited<ReturnType<typeof buildHrAttachments>>;
+    let attachments: Awaited<ReturnType<typeof buildAttachmentsFromUploads>>;
     try {
-      hrAttachments = await buildHrAttachments({
-        state,
-        position,
-        signatures: signatures ?? {},
-        uploads: uploads ?? {},
-        formData: formData ?? undefined,
-      });
+      attachments = await buildAttachmentsFromUploads(link.id, uploadedKeys);
     } catch (buildErr) {
-      console.error('[onboard/complete] buildHrAttachments failed:', buildErr);
-      const msg = buildErr instanceof Error ? buildErr.message : 'Failed to build PDFs';
-      return NextResponse.json({ error: msg }, { status: 500 });
+      console.error('[onboard/complete] buildAttachmentsFromUploads failed:', buildErr);
+      return NextResponse.json(
+        { error: 'Failed to prepare documents. Please try again.' },
+        { status: 500 }
+      );
     }
 
-    if (settings.hrDirectorEmail && hrAttachments.length > 0) {
+    const { hr, headshot } = splitAttachmentsForDelivery(attachments);
+
+    if (settings.hrDirectorEmail && hr.length > 0) {
       const result = await sendEmail(
         {
           to: settings.hrDirectorEmail,
           subject,
-          body: `Onboarding documents for ${newHireName || 'New hire'}, ${position}, ${state}. Please find attached individual PDFs.`,
-          attachments: hrAttachments,
+          body: `Onboarding documents for ${newHireName || 'New hire'}, ${link.position}, ${link.state}. Please find attached.`,
+          attachments: hr,
         },
         fromEmail
       );
@@ -71,13 +80,12 @@ export async function POST(request: Request) {
       }
     }
 
-    const headshot = getHeadshotAttachment(uploads ?? {});
     if (settings.communicationsDirectorEmail && headshot) {
       const result = await sendEmail(
         {
           to: settings.communicationsDirectorEmail,
           subject,
-          body: `Headshot for ${newHireName || 'New hire'}, ${position}, ${state}.`,
+          body: `Headshot for ${newHireName || 'New hire'}, ${link.position}, ${link.state}.`,
           attachments: [headshot],
         },
         fromEmail
@@ -85,6 +93,13 @@ export async function POST(request: Request) {
       if (!result.sent && result.error) {
         console.error('[onboard/complete] Comms email failed:', result.error);
       }
+    }
+
+    try {
+      await deleteAllDocumentsForLink(link.id);
+      await saveProgress(token, { uploadedDocumentKeys: {} });
+    } catch (delErr) {
+      console.error('[onboard/complete] delete/clear after send failed:', delErr);
     }
 
     return NextResponse.json({ ok: true });

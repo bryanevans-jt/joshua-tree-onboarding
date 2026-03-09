@@ -3,11 +3,15 @@ import type { State, Position } from './config';
 /** Progress saved as the new hire completes each item (before final submit) */
 export interface OnboardingProgressData {
   newHireName?: string;
+  /** Step id -> storage key/path for uploaded completed document (download + upload flow). */
+  uploadedDocumentKeys?: Record<string, string>;
+  /** @deprecated Legacy: signatures as data URLs (replaced by uploadedDocumentKeys for doc steps). */
   signatures?: Record<string, string>;
+  /** @deprecated Legacy: uploads as data URLs (replaced by uploadedDocumentKeys for upload steps). */
   uploads?: Record<string, string>;
   /** Step ids the user has advanced past (so checklist shows a check) */
   confirmedStepIds?: string[];
-  /** Per-step form field values for fillable PDFs (stepId -> fieldName -> value). */
+  /** @deprecated Legacy: form field values (replaced by upload completed PDFs). */
   formData?: Record<string, Record<string, string | boolean>>;
 }
 
