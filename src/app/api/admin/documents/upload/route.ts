@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import {
   saveTemplate,
+  setTemplateFilename,
   positionToJobKey,
   SHARED_KEYS,
 } from '@/lib/template-storage';
@@ -60,6 +61,7 @@ export async function POST(request: Request) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
     await saveTemplate(templateKey, buffer);
+    await setTemplateFilename(templateKey, file.name);
 
     return NextResponse.json({ ok: true, key: templateKey });
   } catch (e) {

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getLinkByToken } from '@/lib/store';
-import { readTemplate } from '@/lib/template-storage';
+import { readTemplate, getTemplateFilename } from '@/lib/template-storage';
 import { positionToJobKey, FINGERPRINT_FORM_BY_STATE } from '@/lib/config';
 import type { State } from '@/lib/config';
 
@@ -37,10 +37,16 @@ export async function GET(request: Request) {
   }
   const body = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
   const download = searchParams.get('download') === '1' || searchParams.get('download') === 'true';
+  const downloadFilename = download
+    ? (await getTemplateFilename(templateKey)) ?? `${templateKey}.pdf`
+    : '';
+  const disposition = download
+    ? `attachment; filename="${downloadFilename.replace(/"/g, '\\"')}"`
+    : 'inline';
   return new NextResponse(body as unknown as BodyInit, {
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': download ? 'attachment' : 'inline',
+      'Content-Disposition': disposition,
     },
   });
 }

@@ -137,3 +137,74 @@ export async function listUploadedTemplates(positions: string[]): Promise<string
   if (hasSupabase()) return listUploadedTemplatesSupabase(positions);
   return Promise.resolve(listUploadedTemplatesFile(positions));
 }
+
+// ---------- Original filenames (as uploaded in admin) ----------
+
+const FILENAMES_KEY = '_filenames.json';
+
+async function readFilenamesSupabase(): Promise<Record<string, string>> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.storage.from(TEMPLATES_BUCKET).download(FILENAMES_KEY);
+  if (error || !data) return {};
+  try {
+    const text = await data.text();
+    const json = JSON.parse(text) as Record<string, string>;
+    return typeof json === 'object' && json !== null ? json : {};
+  } catch {
+    return {};
+  }
+}
+
+async function writeFilenamesSupabase(filenames: Record<string, string>): Promise<void> {
+  const supabase = getSupabase();
+  await ensureBucket();
+  const body = JSON.stringify(filenames);
+  await supabase.storage.from(TEMPLATES_BUCKET).upload(FILENAMES_KEY, body, {
+    contentType: 'application/json',
+    upsert: true,
+  });
+}
+
+function readFilenamesFile(): Record<string, string> {
+  const filePath = path.join(TEMPLATES_DIR, FILENAMES_KEY);
+  if (!fs.existsSync(filePath)) return {};
+  try {
+    const json = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Record<string, string>;
+    return typeof json === 'object' && json !== null ? json : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeFilenamesFile(filenames: Record<string, string>): void {
+  ensureDir();
+  fs.writeFileSync(
+    path.join(TEMPLATES_DIR, FILENAMES_KEY),
+    JSON.stringify(filenames, null, 2),
+    'utf-8'
+  );
+}
+
+/** Get the original filename for a template (as uploaded in admin), or null. */
+export async function getTemplateFilename(key: string): Promise<string | null> {
+  if (hasSupabase()) {
+    const all = await readFilenamesSupabase();
+    return all[key] ?? null;
+  }
+  const all = readFilenamesFile();
+  return all[key] ?? null;
+}
+
+/** Set the original filename for a template (call when admin uploads). */
+export async function setTemplateFilename(key: string, filename: string): Promise<void> {
+  const safe = filename.trim() || `${key}.pdf`;
+  if (hasSupabase()) {
+    const all = await readFilenamesSupabase();
+    all[key] = safe;
+    await writeFilenamesSupabase(all);
+    return;
+  }
+  const all = readFilenamesFile();
+  all[key] = safe;
+  writeFilenamesFile(all);
+}

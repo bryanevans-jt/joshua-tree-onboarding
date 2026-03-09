@@ -54,7 +54,7 @@ export async function POST(request: Request) {
 
     let attachments: Awaited<ReturnType<typeof buildAttachmentsFromUploads>>;
     try {
-      attachments = await buildAttachmentsFromUploads(link.id, uploadedKeys);
+      attachments = await buildAttachmentsFromUploads(link.id, uploadedKeys, newHireName || undefined);
     } catch (buildErr) {
       console.error('[onboard/complete] buildAttachmentsFromUploads failed:', buildErr);
       return NextResponse.json(

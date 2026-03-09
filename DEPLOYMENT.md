@@ -42,7 +42,12 @@ The app creates a Storage bucket named **`templates`** automatically on the firs
 
    **Google OAuth (admin sign-in):** In [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials → Create Credentials → OAuth client ID → Web application. Add authorized redirect URI: `https://your-app.vercel.app/api/auth/callback/google` (and `http://localhost:3000/api/auth/callback/google` for local dev).
 
-3. **Optional – prevent Supabase pausing:** Add **`CRON_SECRET`** (e.g. `openssl rand -hex 32`). The app has a keep-alive route at `/api/cron/keep-alive` that runs one tiny Supabase query. **If you have Vercel Pro:** Cron is in `vercel.json` (runs ~every 6 days); Vercel sends `Authorization: Bearer <CRON_SECRET>`. **If you’re on Vercel Hobby (free):** Use a free external cron (e.g. [cron-job.org](https://cron-job.org)) to request `GET https://your-app.vercel.app/api/cron/keep-alive` every 6 days with header `Authorization: Bearer YOUR_CRON_SECRET`.
+3. **Optional – prevent Supabase pausing:** Add **`CRON_SECRET`** (e.g. `openssl rand -hex 32`). The app has a keep-alive route at `/api/cron/keep-alive` that runs one tiny Supabase query. **If you have Vercel Pro:** Cron is in `vercel.json` (runs ~every 6 days); Vercel sends `Authorization: Bearer <CRON_SECRET>`. **If you’re on Vercel Hobby (free):** Use [cron-job.org](https://cron-job.org) (or similar). Many free plans don’t support custom headers, so use the **URL with query param** (same secret as in Vercel):
+
+- **Keep-alive** (every 6 days): `https://your-app.vercel.app/api/cron/keep-alive?secret=YOUR_CRON_SECRET`
+- **Cleanup uploads** (once per day, e.g. 3:00 AM): `https://your-app.vercel.app/api/cron/cleanup-uploads?secret=YOUR_CRON_SECRET`
+
+If your cron service supports headers, you can use `Authorization: Bearer YOUR_CRON_SECRET` instead of `?secret=`.
 
 4. Deploy (or redeploy after adding env vars).
 
