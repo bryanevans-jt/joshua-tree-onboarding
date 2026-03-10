@@ -16,6 +16,24 @@ const ALLOWED_STEPS = new Set([
   'headshot',
 ]);
 
+/** Headshot: JPG and PNG only. All other uploads: PDF, JPG, PNG. */
+const HEADSHOT_ACCEPT = new Set(['image/jpeg', 'image/png']);
+const DOCUMENT_ACCEPT = new Set(['application/pdf', 'image/jpeg', 'image/png']);
+
+function isAcceptedFile(stepId: string, mime: string, name: string): { ok: boolean; allowed: string } {
+  const nameStr = (name || '').toLowerCase();
+  if (stepId === 'headshot') {
+    const extOk = /\.(jpe?g|png)$/.test(nameStr);
+    const mimeOk = HEADSHOT_ACCEPT.has(mime);
+    if ((extOk || mimeOk) && !/\.pdf$/.test(nameStr)) return { ok: true, allowed: '' };
+    return { ok: false, allowed: 'JPG or PNG' };
+  }
+  const extOk = /\.(pdf|jpe?g|png)$/.test(nameStr);
+  const mimeOk = DOCUMENT_ACCEPT.has(mime);
+  if (extOk || mimeOk) return { ok: true, allowed: '' };
+  return { ok: false, allowed: 'PDF, JPG, or PNG' };
+}
+
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
@@ -30,6 +48,15 @@ export async function POST(request: Request) {
     }
     if (!ALLOWED_STEPS.has(stepId)) {
       return NextResponse.json({ error: 'Invalid step' }, { status: 400 });
+    }
+
+    const { ok, allowed } = isAcceptedFile(stepId, file.type || '', file.name || '');
+    if (!ok) {
+      const label = stepId === 'headshot' ? 'Headshot photo' : 'This document';
+      return NextResponse.json(
+        { error: `${label} accepts only ${allowed} files. Please choose an accepted file type.` },
+        { status: 400 }
+      );
     }
 
     const link = await getLinkByToken(token);

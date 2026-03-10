@@ -4,6 +4,19 @@ import { buildAttachmentsFromUploads, splitAttachmentsForDelivery } from '@/lib/
 import { deleteAllDocumentsForLink } from '@/lib/onboarding-upload-storage';
 import { sendEmail } from '@/lib/email';
 
+const REQUIRED_STEPS_GA = [
+  'job_description', 'policy_manual', 'w4', 'g4', 'i9', 'direct_deposit',
+  'fingerprint', 'privacy_notice', 'drivers_license', 'ssn_or_birth', 'headshot',
+] as const;
+const REQUIRED_STEPS_TN = [
+  'job_description', 'policy_manual', 'w4', 'g4', 'i9', 'direct_deposit',
+  'privacy_notice', 'drivers_license', 'ssn_or_birth', 'headshot',
+] as const; // fingerprint optional for Tennessee
+
+function getRequiredSteps(state: string): readonly string[] {
+  return state === 'Tennessee' ? REQUIRED_STEPS_TN : REQUIRED_STEPS_GA;
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -27,9 +40,11 @@ export async function POST(request: Request) {
 
     const progress = link.progress;
     const uploadedKeys = progress?.uploadedDocumentKeys ?? {};
-    if (Object.keys(uploadedKeys).length === 0) {
+    const required = getRequiredSteps(link.state);
+    const missing = required.filter((step) => !uploadedKeys[step]);
+    if (missing.length > 0) {
       return NextResponse.json(
-        { error: 'No documents uploaded. Please upload all required documents.' },
+        { error: 'Please upload all required documents before submitting.' },
         { status: 400 }
       );
     }
@@ -65,12 +80,19 @@ export async function POST(request: Request) {
 
     const { hr, headshot } = splitAttachmentsForDelivery(attachments);
 
+    const fingerprintMissing =
+      link.state === 'Tennessee' && !uploadedKeys['fingerprint'];
+    let hrBody = `Onboarding documents for ${newHireName || 'New hire'}, ${link.position}, ${link.state}. Please find attached.`;
+    if (fingerprintMissing) {
+      hrBody += '\n\nNote: Background Check Results were not submitted.';
+    }
+
     if (settings.hrDirectorEmail && hr.length > 0) {
       const result = await sendEmail(
         {
           to: settings.hrDirectorEmail,
           subject,
-          body: `Onboarding documents for ${newHireName || 'New hire'}, ${link.position}, ${link.state}. Please find attached.`,
+          body: hrBody,
           attachments: hr,
         },
         fromEmail

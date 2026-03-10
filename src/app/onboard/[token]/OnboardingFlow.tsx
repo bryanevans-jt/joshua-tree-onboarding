@@ -2,19 +2,32 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
-const STEPS = [
-  { id: 'name', title: 'Your name', type: 'text' as const, hasDownload: false },
-  { id: 'job_description', title: 'Job description', type: 'document' as const, hasDownload: true },
-  { id: 'policy_manual', title: 'Policy manual', type: 'document' as const, hasDownload: true },
-  { id: 'w4', title: 'W-4', type: 'document' as const, hasDownload: true },
-  { id: 'g4', title: 'G-4', type: 'document' as const, hasDownload: true },
-  { id: 'i9', title: 'I-9', type: 'document' as const, hasDownload: true },
-  { id: 'direct_deposit', title: 'Direct deposit', type: 'document' as const, hasDownload: true },
-  { id: 'fingerprint', title: 'Fingerprint form', type: 'document' as const, hasDownload: true },
-  { id: 'privacy_notice', title: 'Privacy notice', type: 'document' as const, hasDownload: true },
-  { id: 'drivers_license', title: "Driver's license", type: 'upload' as const, hasDownload: false },
-  { id: 'ssn_or_birth', title: 'SSN card or birth certificate', type: 'upload' as const, hasDownload: false },
-  { id: 'headshot', title: 'Headshot', type: 'upload' as const, hasDownload: false },
+const ACCEPT_DOCUMENT = '.pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png';
+const ACCEPT_HEADSHOT = '.jpg,.jpeg,.png,image/jpeg,image/png';
+
+const STEPS: Array<{
+  id: string;
+  title: string;
+  type: 'text' | 'document' | 'upload';
+  hasDownload: boolean;
+  description?: string;
+  /** Shown under the row when present (e.g. TN fingerprint, headshot). */
+  instructions?: string;
+  /** For TN fingerprint: no download, optional. */
+  optionalForState?: string;
+}> = [
+  { id: 'name', title: 'Your name', type: 'text', hasDownload: false },
+  { id: 'job_description', title: 'Job description', type: 'document', hasDownload: true, description: 'Role and responsibilities for your position.' },
+  { id: 'policy_manual', title: 'Policy manual', type: 'document', hasDownload: true, description: 'Company policies and procedures.' },
+  { id: 'w4', title: 'W-4', type: 'document', hasDownload: true, description: 'Federal tax withholding form.' },
+  { id: 'g4', title: 'G-4', type: 'document', hasDownload: true, description: 'Georgia state tax withholding (if applicable).' },
+  { id: 'i9', title: 'I-9', type: 'document', hasDownload: true, description: 'Employment eligibility verification.' },
+  { id: 'direct_deposit', title: 'Direct deposit', type: 'document', hasDownload: true, description: 'Bank account information for payroll.' },
+  { id: 'fingerprint', title: 'Fingerprint form', type: 'document', hasDownload: true, description: 'Background check authorization and results.', optionalForState: 'Tennessee', instructions: 'Upload a copy of your criminal background check results, if available.' },
+  { id: 'privacy_notice', title: 'Privacy notice', type: 'document', hasDownload: true, description: 'Privacy practices and your rights.' },
+  { id: 'drivers_license', title: "Driver's license", type: 'upload', hasDownload: false, description: 'Photo of your valid driver\'s license.' },
+  { id: 'ssn_or_birth', title: 'SSN card or birth certificate', type: 'upload', hasDownload: false, description: 'Proof of identity (SSN card or birth certificate).' },
+  { id: 'headshot', title: 'Headshot photo', type: 'upload', hasDownload: false, description: 'Professional photo for internal use.', instructions: 'Individual photo with full upper body, plain background, and business casual attire. JPG or PNG only.' },
 ];
 
 function CheckIcon() {
@@ -43,6 +56,7 @@ export function OnboardingFlow({ token, state, position }: OnboardingFlowProps) 
   const [name, setName] = useState('');
   const [uploadedKeys, setUploadedKeys] = useState<Record<string, string>>({});
   const [uploadingStepId, setUploadingStepId] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle');
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -82,13 +96,16 @@ export function OnboardingFlow({ token, state, position }: OnboardingFlowProps) 
     [name, uploadedKeys]
   );
 
+  const requiredSteps = STEPS.filter(
+    (s) => s.id !== 'name' && !(s.optionalForState && s.optionalForState === state)
+  );
   const allComplete =
-    !!name.trim() &&
-    STEPS.filter((s) => s.id !== 'name').every((s) => uploadedKeys[s.id]);
+    !!name.trim() && requiredSteps.every((s) => uploadedKeys[s.id]);
 
   async function handleFileChange(stepId: string, file: File | null) {
     if (!file) return;
     setUploadingStepId(stepId);
+    setUploadError((prev) => ({ ...prev, [stepId]: '' }));
     const form = new FormData();
     form.set('token', token);
     form.set('stepId', stepId);
@@ -99,7 +116,10 @@ export function OnboardingFlow({ token, state, position }: OnboardingFlowProps) 
         body: form,
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      if (!res.ok) {
+        setUploadError((prev) => ({ ...prev, [stepId]: data.error || 'Upload failed' }));
+        return;
+      }
       const next = { ...uploadedKeys, [stepId]: data.key };
       setUploadedKeys(next);
       fetch('/api/onboard/progress', {
@@ -112,7 +132,7 @@ export function OnboardingFlow({ token, state, position }: OnboardingFlowProps) 
         }),
       }).catch(() => {});
     } catch (e) {
-      console.error(e);
+      setUploadError((prev) => ({ ...prev, [stepId]: e instanceof Error ? e.message : 'Upload failed' }));
     } finally {
       setUploadingStepId(null);
     }
@@ -166,11 +186,22 @@ export function OnboardingFlow({ token, state, position }: OnboardingFlowProps) 
     );
   }
 
+  const showDownload = (step: (typeof STEPS)[number]) => {
+    if (!step.hasDownload) return false;
+    if (step.id === 'fingerprint' && state === 'Tennessee') return false;
+    return true;
+  };
+  const acceptForStep = (stepId: string) =>
+    stepId === 'headshot' ? ACCEPT_HEADSHOT : ACCEPT_DOCUMENT;
+
   return (
     <div className="flex flex-col gap-6">
       <p className="text-gray-600">
         Download each document where provided, complete and sign it, then upload it here. Your progress is saved so you can return later.
       </p>
+      <div className="rounded-lg border border-gray-200 bg-amber-50/80 px-4 py-3 text-sm text-gray-700">
+        <strong>Accepted file types:</strong> Documents (W-4, I-9, Policy Manual, etc.) and uploads (Driver&apos;s license, SSN/birth certificate) — <strong>PDF, JPG, or PNG</strong>. Headshot photo — <strong>JPG or PNG only</strong>.
+      </div>
 
       <div className="card">
         <label className="block text-sm font-medium text-gray-700">Your name</label>
@@ -198,19 +229,32 @@ export function OnboardingFlow({ token, state, position }: OnboardingFlowProps) 
               {STEPS.map((step) => {
                 const done = isStepComplete(step);
                 const uploading = uploadingStepId === step.id;
+                const err = uploadError[step.id];
+                const optional = step.optionalForState === state;
                 if (step.id === 'name') {
                   return null;
                 }
                 return (
                   <tr key={step.id} className="border-b border-gray-100">
                     <td className="px-4 py-3">
-                      <span className="flex items-center gap-2">
-                        {done ? <CheckIcon /> : <CircleIcon />}
-                        <span className={done ? 'text-gray-900' : 'text-gray-600'}>{step.title}</span>
-                      </span>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="flex items-center gap-2">
+                          {done ? <CheckIcon /> : <CircleIcon />}
+                          <span className={done ? 'text-gray-900' : 'text-gray-600'}>{step.title}</span>
+                          {optional && (
+                            <span className="text-xs text-gray-500 font-normal">(optional)</span>
+                          )}
+                        </span>
+                        {step.description && (
+                          <span className="text-xs text-gray-500 pl-7">{step.description}</span>
+                        )}
+                        {step.instructions && (step.id === 'fingerprint' && state === 'Tennessee' || step.id === 'headshot') && (
+                          <span className="text-xs text-teal-700 pl-7">{step.instructions}</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
-                      {step.hasDownload ? (
+                      {showDownload(step) ? (
                         <a
                           href={documentUrl(step.id)}
                           download
@@ -224,14 +268,36 @@ export function OnboardingFlow({ token, state, position }: OnboardingFlowProps) 
                     </td>
                     <td className="px-4 py-3">
                       {uploadedKeys[step.id] ? (
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-teal-600 font-medium">Uploaded ✓</span>
-                          <label className="text-sm text-gray-500 cursor-pointer hover:text-teal-600">
-                            Replace
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-teal-600 font-medium">Uploaded ✓</span>
+                            <label className="text-sm text-gray-500 cursor-pointer hover:text-teal-600">
+                              Replace
+                              <input
+                                type="file"
+                                accept={acceptForStep(step.id)}
+                                className="sr-only"
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  if (f) handleFileChange(step.id, f);
+                                  e.target.value = '';
+                                }}
+                              />
+                            </label>
+                          </div>
+                          {err && <span className="text-xs text-red-600">{err}</span>}
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-1">
+                          <label className="inline-block">
+                            <span className="btn-secondary cursor-pointer inline-block text-sm">
+                              {uploading ? 'Uploading…' : 'Choose file'}
+                            </span>
                             <input
                               type="file"
-                              accept={step.id === 'headshot' ? '.jpg,.jpeg,.png,image/jpeg,image/png' : undefined}
+                              accept={acceptForStep(step.id)}
                               className="sr-only"
+                              disabled={uploading}
                               onChange={(e) => {
                                 const f = e.target.files?.[0];
                                 if (f) handleFileChange(step.id, f);
@@ -239,24 +305,8 @@ export function OnboardingFlow({ token, state, position }: OnboardingFlowProps) 
                               }}
                             />
                           </label>
+                          {err && <span className="text-sm text-red-600">{err}</span>}
                         </div>
-                      ) : (
-                        <label className="inline-block">
-                          <span className="btn-secondary cursor-pointer inline-block text-sm">
-                            {uploading ? 'Uploading…' : 'Choose file'}
-                          </span>
-                          <input
-                            type="file"
-                            accept={step.id === 'headshot' ? '.jpg,.jpeg,.png,image/jpeg,image/png' : 'application/pdf,image/*'}
-                            className="sr-only"
-                            disabled={uploading}
-                            onChange={(e) => {
-                              const f = e.target.files?.[0];
-                              if (f) handleFileChange(step.id, f);
-                              e.target.value = '';
-                            }}
-                          />
-                        </label>
                       )}
                     </td>
                   </tr>
