@@ -33,8 +33,9 @@ export async function GET(request: Request) {
   }
 
   const filename = `${video.title.replace(/[^\w]+/g, '_') || 'Presentation'}.pdf`;
+  const body = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
 
-  return new NextResponse(buf, {
+  return new NextResponse(body as unknown as BodyInit, {
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="${filename}"`,
