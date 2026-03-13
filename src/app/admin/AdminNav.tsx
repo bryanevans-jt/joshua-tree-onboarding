@@ -16,6 +16,9 @@ export default function AdminNav({ userEmail }: { userEmail: string | null | und
         <Link href="/admin/settings" className="text-gray-600 hover:text-gray-900">
           Settings
         </Link>
+        <Link href="/admin/training" className="text-gray-600 hover:text-gray-900">
+          Training
+        </Link>
         <Link href="/admin/documents" className="text-gray-600 hover:text-gray-900">
           Documents
         </Link>
