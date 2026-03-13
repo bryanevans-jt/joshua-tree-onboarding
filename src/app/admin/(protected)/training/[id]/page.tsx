@@ -309,6 +309,81 @@ export default function AdminEditTrainingModulePage({ params }: PageProps) {
                     className="text-xs text-gray-600 hover:text-gray-800"
                     onClick={async () => {
                       setError(null);
+                      const newTitle = prompt('Edit video title:', v.title)?.trim();
+                      if (!newTitle) return;
+                      const newUrl = prompt('Edit YouTube URL:', v.youtubeUrl)?.trim();
+                      if (!newUrl) return;
+                      try {
+                        const res = await fetch(
+                          `/api/admin/training/modules/${id}/videos/${v.id}`,
+                          {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ title: newTitle, youtubeUrl: newUrl }),
+                          }
+                        );
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || 'Failed to update video');
+                        setModule((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                videos: prev.videos.map((vv) =>
+                                  vv.id === v.id
+                                    ? {
+                                        ...vv,
+                                        title: data.video.title,
+                                        youtubeUrl: data.video.youtubeUrl,
+                                      }
+                                    : vv
+                                ),
+                              }
+                            : prev
+                        );
+                      } catch (e) {
+                        setError(
+                          e instanceof Error ? e.message : 'Failed to update video'
+                        );
+                      }
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="text-xs text-red-600 hover:text-red-700"
+                    onClick={async () => {
+                      if (!confirm('Delete this video from the module?')) return;
+                      setError(null);
+                      try {
+                        const res = await fetch(
+                          `/api/admin/training/modules/${id}/videos/${v.id}`,
+                          { method: 'DELETE' }
+                        );
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || 'Failed to delete video');
+                        setModule((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                videos: prev.videos.filter((vv) => vv.id !== v.id),
+                              }
+                            : prev
+                        );
+                      } catch (e) {
+                        setError(
+                          e instanceof Error ? e.message : 'Failed to delete video'
+                        );
+                      }
+                    }}
+                  >
+                    Delete
+                  </button>
+                  <button
+                    type="button"
+                    className="text-xs text-gray-600 hover:text-gray-800"
+                    onClick={async () => {
+                      setError(null);
                       try {
                         const res = await fetch(
                           `/api/admin/training/modules/${id}/videos/${v.id}/version`,
