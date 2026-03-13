@@ -74,7 +74,7 @@ export async function GET() {
 
   for (const mod of modules ?? []) {
     const totalVideos = videosByModule.get(mod.id)?.length ?? 0;
-    const userMap = grouped.get(mod.id) ?? new Map();
+    const userMap = grouped.get(mod.id) ?? new Map<string, Set<string>>();
     const rows: Array<{
       userId: string;
       userEmail: string;
@@ -82,7 +82,9 @@ export async function GET() {
       completedCount: number;
       totalVideos: number;
     }> = [];
-    for (const [userId, vids] of userMap.entries()) {
+    const entries = Array.from(userMap.entries());
+    for (let i = 0; i < entries.length; i++) {
+      const [userId, vids] = entries[i];
       const sample = (progress ?? []).find(
         (p) => p.user_id === userId && p.module_id === mod.id
       );
