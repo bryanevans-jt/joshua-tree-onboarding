@@ -14,7 +14,7 @@ export default async function TrainingModulePage({ params }: PageProps) {
   const session = await getServerSession(authOptions);
   const email = session?.user?.email ?? null;
   if (!email) {
-    redirect('/admin/signin'); // Reuse existing Google sign-in flow
+    redirect(`/training/signin?callbackUrl=${encodeURIComponent(`/training/module/${slug}`)}`);
   }
 
   const module = await getModuleBySlug(slug);
