@@ -81,15 +81,17 @@ export async function POST(request: Request) {
         process.env.GMAIL_USER ||
         '';
 
-      const recipients = new Set<string>();
+      const recipientsSet = new Set<string>();
       (trainingSettings.notificationEmails || []).forEach((r) =>
-        recipients.add(r)
+        recipientsSet.add(r)
       );
-      if (appSettings?.hrDirectorEmail) recipients.add(appSettings.hrDirectorEmail);
+      if (appSettings?.hrDirectorEmail) recipientsSet.add(appSettings.hrDirectorEmail);
 
       const bodyText = `Training videos complete for ${userName} (${email}) in module "${moduleName}".`;
+      const recipients = Array.from(recipientsSet);
 
-      for (const to of recipients) {
+      for (let i = 0; i < recipients.length; i++) {
+        const to = recipients[i];
         const result = await sendEmail(
           {
             to,
