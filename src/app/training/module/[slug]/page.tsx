@@ -2,7 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { getModuleBySlug, listVideosForModule } from '@/lib/training-store';
-import { TrainingModuleClient } from './TrainingModuleClient';
+import { TrainingModuleClient } from '../TrainingModuleClient';
 
 interface PageProps {
   params: Promise<{ slug: string }>;
