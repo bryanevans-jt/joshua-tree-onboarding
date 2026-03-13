@@ -194,20 +194,24 @@ export function TrainingModuleClient({ moduleId, moduleName, videos }: Props) {
         </div>
 
         {videoId ? (
-          <div className="aspect-video w-full overflow-hidden rounded-lg bg-black">
-            <YouTube
-              videoId={videoId}
-              opts={{
-                width: '100%',
-                height: '100%',
-                playerVars: {
-                  modestbranding: 1,
-                  rel: 0,
-                },
-              }}
-              onReady={handleReady}
-              onStateChange={handleStateChange}
-            />
+          <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-black">
+            <div className="absolute inset-0">
+              <YouTube
+                videoId={videoId}
+                className="h-full w-full"
+                iframeClassName="absolute left-0 top-0 h-full w-full min-h-full min-w-full"
+                opts={{
+                  width: '100%',
+                  height: '100%',
+                  playerVars: {
+                    modestbranding: 1,
+                    rel: 0,
+                  },
+                }}
+                onReady={handleReady}
+                onStateChange={handleStateChange}
+              />
+            </div>
           </div>
         ) : (
           <p className="text-sm text-red-600">
