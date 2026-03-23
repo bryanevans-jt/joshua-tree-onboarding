@@ -78,14 +78,17 @@ async function hasTemplateSupabase(key: string): Promise<boolean> {
 }
 
 async function listUploadedTemplatesSupabase(positions: string[]): Promise<string[]> {
-  const supabase = getSupabase();
-  const { data: files, error } = await supabase.storage.from(TEMPLATES_BUCKET).list('', {
-    limit: 500,
-  });
-  if (error) return [];
-  const names = new Set((files ?? []).map((f) => (f.name || '').replace(/\.pdf$/i, '')));
+  // Some Supabase storage deployments can be eventually-consistent for list()
+  // right after an upload. To make the admin UI immediately reflect new uploads,
+  // verify existence for each expected template key instead of relying on list().
   const keys = getAllTemplateKeys(positions);
-  return keys.filter((k) => names.has(k));
+  const uploaded: string[] = [];
+  for (const k of keys) {
+    // eslint-disable-next-line no-await-in-loop
+    const exists = await hasTemplateSupabase(k);
+    if (exists) uploaded.push(k);
+  }
+  return uploaded;
 }
 
 // ---------- Filesystem ----------
