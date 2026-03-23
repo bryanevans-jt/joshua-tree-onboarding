@@ -24,6 +24,7 @@ const STEPS: Array<{
   { id: 'i9', title: 'I-9', type: 'document', hasDownload: true, description: 'Employment eligibility verification.' },
   { id: 'direct_deposit', title: 'Direct deposit', type: 'document', hasDownload: true, description: 'Bank account information for payroll.' },
   { id: 'fingerprint', title: 'Fingerprint form', type: 'document', hasDownload: true, description: 'Background check authorization and results.', optionalForState: 'Tennessee', instructions: 'Upload a copy of your criminal background check results, if available.' },
+  { id: 'national_child_protection_act_consent', title: 'National Child Protection Act Consent Form', type: 'document', hasDownload: true, description: 'Consent form required for background screening.' },
   { id: 'privacy_notice', title: 'Privacy notice', type: 'document', hasDownload: true, description: 'Privacy practices and your rights.' },
   { id: 'drivers_license', title: "Driver's license", type: 'upload', hasDownload: false, description: 'Photo of your valid driver\'s license.' },
   { id: 'ssn_or_birth', title: 'SSN card or birth certificate', type: 'upload', hasDownload: false, description: 'Proof of identity (SSN card or birth certificate).' },

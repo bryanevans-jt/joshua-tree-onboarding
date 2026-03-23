@@ -6,11 +6,11 @@ import { sendEmail } from '@/lib/email';
 
 const REQUIRED_STEPS_GA = [
   'job_description', 'policy_manual', 'w4', 'g4', 'i9', 'direct_deposit',
-  'fingerprint', 'privacy_notice', 'drivers_license', 'ssn_or_birth', 'headshot',
+  'fingerprint', 'national_child_protection_act_consent', 'privacy_notice', 'drivers_license', 'ssn_or_birth', 'headshot',
 ] as const;
 const REQUIRED_STEPS_TN = [
   'job_description', 'policy_manual', 'w4', 'g4', 'i9', 'direct_deposit',
-  'privacy_notice', 'drivers_license', 'ssn_or_birth', 'headshot',
+  'national_child_protection_act_consent', 'privacy_notice', 'drivers_license', 'ssn_or_birth', 'headshot',
 ] as const; // fingerprint optional for Tennessee
 
 function getRequiredSteps(state: string): readonly string[] {

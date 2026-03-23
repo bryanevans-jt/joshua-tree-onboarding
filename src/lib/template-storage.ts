@@ -19,6 +19,7 @@ export const SHARED_KEYS = [
   'direct_deposit',
   'fingerprint_ga',
   'fingerprint_tn',
+  'national_child_protection_act_consent',
 ] as const;
 
 export type SharedTemplateKey = (typeof SHARED_KEYS)[number];

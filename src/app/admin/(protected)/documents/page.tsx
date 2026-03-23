@@ -12,6 +12,7 @@ const SHARED_DOCS: { key: string; label: string }[] = [
   { key: 'direct_deposit', label: 'Direct Deposit' },
   { key: 'fingerprint_ga', label: 'Fingerprint form (Georgia)' },
   { key: 'fingerprint_tn', label: 'Fingerprint form (Tennessee)' },
+  { key: 'national_child_protection_act_consent', label: 'National Child Protection Act Consent Form' },
 ];
 
 export default function AdminDocumentsPage() {

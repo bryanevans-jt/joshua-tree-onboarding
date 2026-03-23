@@ -18,6 +18,7 @@ const STEP_TO_FILENAME: Record<string, string> = {
   i9: 'I-9.pdf',
   direct_deposit: 'Direct-Deposit.pdf',
   fingerprint: 'Fingerprint-Form.pdf',
+  national_child_protection_act_consent: 'National-Child-Protection-Act-Consent-Form.pdf',
   privacy_notice: 'Privacy-Notice.pdf',
   drivers_license: 'Drivers-License.pdf',
   ssn_or_birth: 'SSN-or-Birth-Certificate.pdf',

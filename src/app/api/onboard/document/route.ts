@@ -12,6 +12,7 @@ const STEP_TO_TEMPLATE: Record<string, (state: State, position: string) => strin
   i9: () => 'i9',
   direct_deposit: () => 'direct_deposit',
   fingerprint: (state) => FINGERPRINT_FORM_BY_STATE[state],
+  national_child_protection_act_consent: () => 'national_child_protection_act_consent',
   privacy_notice: () => 'privacy_notice',
 };
 

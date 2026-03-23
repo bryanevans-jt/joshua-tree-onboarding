@@ -10,6 +10,7 @@ const ALLOWED_STEPS = new Set([
   'i9',
   'direct_deposit',
   'fingerprint',
+  'national_child_protection_act_consent',
   'privacy_notice',
   'drivers_license',
   'ssn_or_birth',
