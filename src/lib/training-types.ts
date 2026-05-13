@@ -40,7 +40,8 @@ export interface TrainingSection {
 
 export interface TrainingRosterRow {
   email: string;
-  teamId: string;
+  /** One or more teams (e.g. Georgia Vocational, Tennessee Vocational, or both). */
+  teamIds: string[];
   supervisorEmail: string;
   displayName?: string | null;
 }

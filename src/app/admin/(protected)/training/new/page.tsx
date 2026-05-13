@@ -6,7 +6,7 @@ import Link from 'next/link';
 
 export default function AdminNewTrainingModulePage() {
   const router = useRouter();
-  const [teams, setTeams] = useState<Array<{ id: string; label: string }>>([]);
+  const [teams, setTeams] = useState<Array<{ id: string; label: string; active?: boolean }>>([]);
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
@@ -20,7 +20,7 @@ export default function AdminNewTrainingModulePage() {
     fetch('/api/admin/training/teams')
       .then((r) => r.json())
       .then((d) => {
-        const t = d.teams ?? [];
+        const t = (d.teams ?? []).filter((x: { active?: boolean }) => x.active !== false);
         setTeams(t);
         if (t[0]?.id) setTeamId(t[0].id);
       })
@@ -55,12 +55,18 @@ export default function AdminNewTrainingModulePage() {
   }
 
   return (
-    <div className="mx-auto max-w-lg space-y-4">
-      <Link href="/admin/training" className="text-sm text-teal-600 hover:text-teal-700">
-        ← Training modules
-      </Link>
-      <div className="card">
-        <h1 className="mb-4 text-xl font-semibold">New training module</h1>
+    <div className="training-admin-page mx-auto max-w-lg space-y-6">
+      <div className="training-admin-hero rounded-2xl border border-teal-100 bg-gradient-to-br from-white to-teal-50/60 p-5 shadow-sm">
+        <Link href="/admin/training" className="text-sm font-medium text-teal-700 hover:text-teal-800">
+          ← Training hub
+        </Link>
+        <h1 className="mt-2 text-xl font-bold text-gray-900">Create a module</h1>
+        <p className="mt-2 text-sm text-gray-600">
+          Pick <strong>company-wide</strong> for everyone, or attach the module to one <strong>active team</strong>{' '}
+          (e.g. Georgia Vocational). You will add ordered sections after saving.
+        </p>
+      </div>
+      <div className="card border-slate-200 shadow-md">
         {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
         <form onSubmit={handleSubmit} className="space-y-4">
           <label className="block text-sm">

@@ -8,6 +8,19 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   if (pathname === '/admin/signin') return NextResponse.next();
 
+  if (pathname.startsWith('/supervisor')) {
+    const token = await getToken({
+      req: request,
+      secret: process.env.NEXTAUTH_SECRET,
+    });
+    if (!token?.email) {
+      const signIn = new URL('/training/signin', request.url);
+      signIn.searchParams.set('callbackUrl', pathname);
+      return NextResponse.redirect(signIn);
+    }
+    return NextResponse.next();
+  }
+
   if (pathname.startsWith('/admin')) {
     const token = await getToken({
       req: request,
@@ -51,5 +64,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin', '/admin/:path*', '/training', '/training/:path*'],
+  matcher: ['/admin', '/admin/:path*', '/training', '/training/:path*', '/supervisor', '/supervisor/:path*'],
 };

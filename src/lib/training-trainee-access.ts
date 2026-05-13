@@ -1,6 +1,13 @@
 import { isApprovedAdmin } from '@/lib/approved-admins';
 import type { TrainingModule } from '@/lib/training-types';
-import { getRosterRow } from '@/lib/training-store';
+import { getRosterRow, isTaggedSupervisor } from '@/lib/training-store';
+
+/** Admins, rostered learners, or tagged supervisors (personal training + portal). */
+export async function canUseTrainingCenter(userEmail: string): Promise<boolean> {
+  if (await isApprovedAdmin(userEmail)) return true;
+  if (await getRosterRow(userEmail)) return true;
+  return isTaggedSupervisor(userEmail);
+}
 
 export async function canUserAccessTrainingModule(
   userEmail: string,
@@ -8,7 +15,10 @@ export async function canUserAccessTrainingModule(
 ): Promise<boolean> {
   if (await isApprovedAdmin(userEmail)) return true;
   const roster = await getRosterRow(userEmail);
+  if (module.isCompanyWide) {
+    if (roster) return true;
+    return isTaggedSupervisor(userEmail);
+  }
   if (!roster) return false;
-  if (module.isCompanyWide) return true;
-  return module.teamId === roster.teamId;
+  return !!module.teamId && roster.teamIds.includes(module.teamId);
 }

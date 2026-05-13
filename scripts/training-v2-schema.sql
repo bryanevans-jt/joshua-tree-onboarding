@@ -1,6 +1,9 @@
 -- Training v2 — run once in Supabase SQL editor (clean start for training tables).
 -- Destroys legacy training_videos / training_progress rows. Keeps training_modules rows
 -- only if you need to preserve module ids; this script DROPS those dependent tables first.
+--
+-- If you already ran an older v2 script that used training_roster.team_id, run
+-- scripts/training-roster-multi-team.sql once to add roster_teams and drop team_id.
 
 -- ---------- Teams ----------
 create table if not exists public.training_teams (
@@ -14,7 +17,8 @@ create table if not exists public.training_teams (
 
 insert into public.training_teams (slug, label, sort_order, active)
 values
-  ('vocational', 'Vocational', 10, true),
+  ('georgia-vocational', 'Georgia Vocational', 10, true),
+  ('tennessee-vocational', 'Tennessee Vocational', 11, true),
   ('transition', 'Transition', 20, true),
   ('admin', 'Admin', 30, true),
   ('marketing', 'Marketing', 40, true)
@@ -52,15 +56,23 @@ create table if not exists public.training_sections (
 create index if not exists training_sections_module_order_idx
   on public.training_sections (module_id, order_index);
 
--- ---------- Roster & supervisors ----------
+-- ---------- Roster & supervisors (multi-team via roster_teams) ----------
 create table if not exists public.training_roster (
   email text primary key,
-  team_id uuid not null references public.training_teams (id) on delete restrict,
   supervisor_email text not null,
   display_name text,
   created_at timestamptz not null default now(),
   updated_at timestamptz
 );
+
+create table if not exists public.training_roster_teams (
+  email text not null references public.training_roster (email) on delete cascade,
+  team_id uuid not null references public.training_teams (id) on delete restrict,
+  primary key (email, team_id)
+);
+
+create index if not exists training_roster_teams_team_idx
+  on public.training_roster_teams (team_id);
 
 create table if not exists public.training_supervisors (
   email text primary key,

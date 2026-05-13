@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
 interface ModuleRow {
@@ -103,12 +104,16 @@ export default function TrainingCompletionsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="training-admin-page space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="mb-1 text-xl font-semibold">Training completions</h1>
+          <Link href="/admin/training/overview" className="text-sm font-medium text-teal-700 hover:text-teal-800">
+            ← Team progress overview
+          </Link>
+          <h1 className="mb-1 mt-2 text-xl font-semibold text-gray-900">Per-module progress</h1>
           <p className="text-sm text-gray-600">
-            View who has started or completed each training module and reset progress if needed.
+            Drill into each module: who has progress, how many sections are satisfied, and reset per learner if
+            needed. For a roster-wide dashboard, use Team progress overview.
           </p>
         </div>
         {!loading && !error && modules.length > 0 && (

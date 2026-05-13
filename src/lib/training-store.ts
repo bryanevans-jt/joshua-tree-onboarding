@@ -146,16 +146,18 @@ export async function isTaggedSupervisor(email: string): Promise<boolean> {
 
 export async function getRosterRow(email: string): Promise<TrainingRosterRow | null> {
   const supabase = getSupabase();
-  const { data, error } = await supabase
-    .from('training_roster')
-    .select('*')
-    .eq('email', normEmail(email))
-    .maybeSingle();
+  const e = normEmail(email);
+  const { data, error } = await supabase.from('training_roster').select('*').eq('email', e).maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) return null;
+  const { data: teamRows, error: e2 } = await supabase
+    .from('training_roster_teams')
+    .select('team_id')
+    .eq('email', e);
+  if (e2) throw new Error(e2.message);
   return {
     email: data.email,
-    teamId: data.team_id,
+    teamIds: (teamRows ?? []).map((t: { team_id: string }) => t.team_id),
     supervisorEmail: normEmail(data.supervisor_email),
     displayName: data.display_name ?? null,
   };
@@ -163,14 +165,22 @@ export async function getRosterRow(email: string): Promise<TrainingRosterRow | n
 
 export async function listRoster(): Promise<TrainingRosterRow[]> {
   const supabase = getSupabase();
-  const { data, error } = await supabase
-    .from('training_roster')
-    .select('*')
-    .order('email', { ascending: true });
+  const { data: people, error } = await supabase.from('training_roster').select('*').order('email', {
+    ascending: true,
+  });
   if (error) throw new Error(error.message);
-  return (data ?? []).map((r: any) => ({
+  const { data: links, error: e2 } = await supabase.from('training_roster_teams').select('email, team_id');
+  if (e2) throw new Error(e2.message);
+  const map = new Map<string, string[]>();
+  for (const l of links ?? []) {
+    const em = normEmail((l as { email: string }).email);
+    const arr = map.get(em) ?? [];
+    arr.push((l as { team_id: string }).team_id);
+    map.set(em, arr);
+  }
+  return (people ?? []).map((r: any) => ({
     email: r.email,
-    teamId: r.team_id,
+    teamIds: map.get(normEmail(r.email)) ?? [],
     supervisorEmail: normEmail(r.supervisor_email),
     displayName: r.display_name ?? null,
   }));
@@ -183,17 +193,29 @@ export async function upsertRosterRow(row: TrainingRosterRow): Promise<void> {
   if (!tagged) {
     throw new Error('Supervisor email must be tagged as a supervisor first.');
   }
-  const { error } = await supabase.from('training_roster').upsert(
+  const e = normEmail(row.email);
+  if (!row.teamIds.length) {
+    throw new Error('Select at least one team.');
+  }
+  const teams = await adminListAllTeams();
+  const valid = new Set(teams.filter((t) => t.active).map((t) => t.id));
+  for (const tid of row.teamIds) {
+    if (!valid.has(tid)) throw new Error('Invalid or inactive team selected.');
+  }
+  const { error: err1 } = await supabase.from('training_roster').upsert(
     {
-      email: normEmail(row.email),
-      team_id: row.teamId,
+      email: e,
       supervisor_email: sup,
       display_name: row.displayName?.trim() || null,
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'email' }
   );
-  if (error) throw new Error(error.message);
+  if (err1) throw new Error(err1.message);
+  await supabase.from('training_roster_teams').delete().eq('email', e);
+  const rows = row.teamIds.map((team_id) => ({ email: e, team_id }));
+  const { error: err2 } = await supabase.from('training_roster_teams').insert(rows);
+  if (err2) throw new Error(err2.message);
 }
 
 export async function deleteRosterRow(email: string): Promise<void> {
@@ -304,17 +326,18 @@ export async function listCompanyWideModules(): Promise<TrainingModule[]> {
   return all.filter((m) => m.isCompanyWide);
 }
 
-export async function getTeamModuleForTeam(teamId: string): Promise<TrainingModule | null> {
+/** All non–company-wide modules tied to a team (usually one; multiple allowed). */
+export async function listTeamModulesForTeam(teamId: string): Promise<TrainingModule[]> {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from('training_modules')
     .select('*')
     .eq('is_company_wide', false)
     .eq('team_id', teamId)
-    .limit(1)
-    .maybeSingle();
+    .order('module_sort_order', { ascending: true })
+    .order('name', { ascending: true });
   if (error) throw new Error(error.message);
-  return data ? rowModule(data) : null;
+  return (data ?? []).map(rowModule);
 }
 
 // ---------- Sections ----------

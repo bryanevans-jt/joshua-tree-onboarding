@@ -3,9 +3,10 @@ import { gradeQuiz } from './training-quiz';
 import type { TrainingModule, TrainingSection } from './training-types';
 import {
   getRosterRow,
-  getTeamModuleForTeam,
+  isTaggedSupervisor,
   listCompanyWideModules,
   listSectionsForModule,
+  listTeamModulesForTeam,
 } from './training-store';
 
 export interface SectionProgressRow {
@@ -74,16 +75,87 @@ export async function isTeamModuleCompleteForUser(
   userEmail: string
 ): Promise<boolean> {
   const roster = await getRosterRow(userEmail);
-  if (!roster) return false;
-  const teamMod = await getTeamModuleForTeam(roster.teamId);
-  if (!teamMod) return true;
-  const sections = await listSectionsForModule(teamMod.id);
-  if (sections.length === 0) return true;
-  for (const s of sections) {
-    const p = await getSectionProgress(userId, s.id);
-    if (!isSectionSatisfied(s, p)) return false;
+  if (!roster) {
+    if (await isTaggedSupervisor(userEmail)) return true;
+    return false;
+  }
+  for (const tid of roster.teamIds) {
+    const mods = await listTeamModulesForTeam(tid);
+    for (const tm of mods) {
+      const sections = await listSectionsForModule(tm.id);
+      if (sections.length === 0) continue;
+      for (const s of sections) {
+        const p = await getSectionProgress(userId, s.id);
+        if (!isSectionSatisfied(s, p)) return false;
+      }
+    }
   }
   return true;
+}
+
+/** Totals for trainee hub / modules header (company-wide + all team modules for assigned teams). */
+export async function getTraineeAggregateProgress(
+  userId: string,
+  userEmail: string
+): Promise<{
+  companyDone: number;
+  companyTotal: number;
+  teamDone: number;
+  teamTotal: number;
+  overallPercent: number;
+  companyWideProgramComplete: boolean;
+  tierLabel: string;
+}> {
+  let companyDone = 0;
+  let companyTotal = 0;
+  const cw = await listCompanyWideModules();
+  for (const m of cw) {
+    const sections = await listSectionsForModule(m.id);
+    companyTotal += sections.length;
+    for (const s of sections) {
+      const p = await getSectionProgress(userId, s.id);
+      if (isSectionSatisfied(s, p)) companyDone++;
+    }
+  }
+
+  let teamDone = 0;
+  let teamTotal = 0;
+  const roster = await getRosterRow(userEmail);
+  if (roster) {
+    const seenMod = new Set<string>();
+    for (const tid of roster.teamIds) {
+      for (const tm of await listTeamModulesForTeam(tid)) {
+        if (seenMod.has(tm.id)) continue;
+        seenMod.add(tm.id);
+        const sections = await listSectionsForModule(tm.id);
+        teamTotal += sections.length;
+        for (const s of sections) {
+          const p = await getSectionProgress(userId, s.id);
+          if (isSectionSatisfied(s, p)) teamDone++;
+        }
+      }
+    }
+  }
+
+  const denom = companyTotal + teamTotal;
+  const done = companyDone + teamDone;
+  const overallPercent = denom === 0 ? 0 : Math.round((100 * done) / denom);
+  const companyWideProgramComplete = await isCompanyWideProgramComplete(userId);
+  let tierLabel = 'Getting warmed up';
+  if (overallPercent >= 100) tierLabel = 'Program complete';
+  else if (overallPercent >= 75) tierLabel = 'Strong finish';
+  else if (overallPercent >= 50) tierLabel = 'Halfway hero';
+  else if (overallPercent >= 25) tierLabel = 'Building momentum';
+
+  return {
+    companyDone,
+    companyTotal,
+    teamDone,
+    teamTotal,
+    overallPercent,
+    companyWideProgramComplete,
+    tierLabel,
+  };
 }
 
 export async function recordVideoSectionWatched(opts: {
@@ -181,8 +253,15 @@ export async function buildQuizAttemptSummaryForUser(
   const roster = await getRosterRow(userEmail);
   const modules: TrainingModule[] = [...(await listCompanyWideModules())];
   if (roster) {
-    const tm = await getTeamModuleForTeam(roster.teamId);
-    if (tm) modules.push(tm);
+    const seen = new Set<string>();
+    for (const tid of roster.teamIds) {
+      for (const tm of await listTeamModulesForTeam(tid)) {
+        if (!seen.has(tm.id)) {
+          seen.add(tm.id);
+          modules.push(tm);
+        }
+      }
+    }
   }
   for (const m of modules) {
     const sections = await listSectionsForModule(m.id);

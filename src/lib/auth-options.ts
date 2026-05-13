@@ -1,6 +1,7 @@
 import type { NextAuthOptions } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
 import { isApprovedAdmin } from '@/lib/approved-admins';
+import { isTaggedSupervisor } from '@/lib/training-store';
 
 const JOSHUA_TREE_SUFFIX = '@thejoshuatree.org';
 
@@ -34,6 +35,10 @@ export const authOptions: NextAuthOptions = {
         token.name = user.name;
         token.isTrainingAdmin = await isApprovedAdmin(user.email);
       }
+      const em = (token.email as string | undefined) ?? undefined;
+      if (em) {
+        token.isTrainingSupervisor = await isTaggedSupervisor(em);
+      }
       return token;
     },
     async session({ session, token }) {
@@ -41,6 +46,7 @@ export const authOptions: NextAuthOptions = {
         session.user.email = (token.email as string) ?? session.user.email;
         session.user.name = (token.name as string) ?? session.user.name;
         session.user.isTrainingAdmin = !!token.isTrainingAdmin;
+        session.user.isTrainingSupervisor = !!token.isTrainingSupervisor;
       }
       return session;
     },

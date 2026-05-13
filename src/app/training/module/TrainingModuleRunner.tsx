@@ -217,8 +217,12 @@ export function TrainingModuleRunner({ initial }: TrainingModuleRunnerProps) {
                   >
                     <span className="text-xs text-gray-400">{i + 1}. </span>
                     {s.title}
-                    <span className="mt-0.5 block text-xs text-gray-500">
-                      {done ? 'Complete' : 'Incomplete'}
+                    <span className="mt-0.5 block text-xs">
+                      {done ? (
+                        <span className="font-medium text-emerald-600">✓ Cleared</span>
+                      ) : (
+                        <span className="text-gray-500">○ Up next</span>
+                      )}
                     </span>
                   </button>
                 </li>

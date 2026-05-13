@@ -1,10 +1,9 @@
 import { notFound, redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
-import { isApprovedAdmin } from '@/lib/approved-admins';
+import { canUseTrainingCenter, canUserAccessTrainingModule } from '@/lib/training-trainee-access';
 import {
   getModuleBySlug,
-  getRosterRow,
   listSectionsForModule,
   serializeSectionLearner,
 } from '@/lib/training-store';
@@ -13,7 +12,6 @@ import {
   isCompanyWideProgramComplete,
   isSectionSatisfied,
 } from '@/lib/training-progress';
-import { canUserAccessTrainingModule } from '@/lib/training-trainee-access';
 import Link from 'next/link';
 import { TrainingModuleRunner } from '../TrainingModuleRunner';
 
@@ -30,9 +28,8 @@ export default async function TrainingModulePage({ params }: PageProps) {
     redirect(`/training/signin?callbackUrl=${encodeURIComponent(`/training/module/${slug}`)}`);
   }
 
-  if (!(await isApprovedAdmin(email))) {
-    const roster = await getRosterRow(email);
-    if (!roster) redirect('/training/pending-roster');
+  if (!(await canUseTrainingCenter(email))) {
+    redirect('/training/pending-roster');
   }
 
   const mod = await getModuleBySlug(slug);

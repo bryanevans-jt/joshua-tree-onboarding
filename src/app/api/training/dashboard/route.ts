@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { isApprovedAdmin } from '@/lib/approved-admins';
+import { canUserAccessTrainingModule } from '@/lib/training-trainee-access';
 import {
   getSectionProgress,
   isCompanyWideProgramComplete,
@@ -10,9 +11,9 @@ import {
 import {
   getModuleBySlug,
   getRosterRow,
-  getTeamModuleForTeam,
   listCompanyWideModules,
   listSectionsForModule,
+  listTeamModulesForTeam,
   serializeSection,
 } from '@/lib/training-store';
 
@@ -35,15 +36,8 @@ export async function GET(request: Request) {
   if (slug) {
     const mod = await getModuleBySlug(slug);
     if (!mod) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    if (!isAdmin) {
-      if (!roster) {
-        return NextResponse.json({ error: 'Not on roster' }, { status: 403 });
-      }
-      if (mod.isCompanyWide) {
-        /* ok */
-      } else if (mod.teamId !== roster.teamId) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-      }
+    if (!isAdmin && !(await canUserAccessTrainingModule(email, mod))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
     const sections = await listSectionsForModule(mod.id);
     const companyDone = await isCompanyWideProgramComplete(userId);
@@ -99,41 +93,49 @@ export async function GET(request: Request) {
     });
   }
 
-  let team: {
+  const teamModules: Array<{
     id: string;
     name: string;
     slug: string;
     total: number;
     done: number;
     locked: boolean;
-  } | null = null;
+    teamId: string;
+  }> = [];
   if (roster) {
-    const tm = await getTeamModuleForTeam(roster.teamId);
-    if (tm) {
-      const sections = await listSectionsForModule(tm.id);
-      let done = 0;
-      for (const s of sections) {
-        const p = await getSectionProgress(userId, s.id);
-        if (isSectionSatisfied(s, p)) done++;
+    for (const tid of roster.teamIds) {
+      const mods = await listTeamModulesForTeam(tid);
+      for (const tm of mods) {
+        const sections = await listSectionsForModule(tm.id);
+        let done = 0;
+        for (const s of sections) {
+          const p = await getSectionProgress(userId, s.id);
+          if (isSectionSatisfied(s, p)) done++;
+        }
+        teamModules.push({
+          id: tm.id,
+          name: tm.name,
+          slug: tm.slug,
+          total: sections.length,
+          done,
+          locked: !companyWideProgramComplete,
+          teamId: tid,
+        });
       }
-      team = {
-        id: tm.id,
-        name: tm.name,
-        slug: tm.slug,
-        total: sections.length,
-        done,
-        locked: !companyWideProgramComplete,
-      };
     }
   }
 
   return NextResponse.json({
     roster: roster
-      ? { email: roster.email, teamId: roster.teamId, supervisorEmail: roster.supervisorEmail }
+      ? {
+          email: roster.email,
+          teamIds: roster.teamIds,
+          supervisorEmail: roster.supervisorEmail,
+        }
       : null,
     isAdminPreview: isAdmin && !roster,
     companyWideProgramComplete,
     companyModules: companyPayload,
-    teamModule: team,
+    teamModules,
   });
 }

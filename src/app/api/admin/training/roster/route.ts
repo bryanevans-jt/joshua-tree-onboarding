@@ -24,14 +24,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   const body = await request.json();
+  const teamIdsRaw = body.teamIds as unknown;
+  const legacyTeamId = (body.teamId as string | undefined)?.trim() || '';
+  const teamIds: string[] = Array.isArray(teamIdsRaw)
+    ? (teamIdsRaw as string[]).map((x) => String(x).trim()).filter(Boolean)
+    : legacyTeamId
+      ? [legacyTeamId]
+      : [];
+
   const row: TrainingRosterRow = {
     email: (body.email as string) || '',
-    teamId: (body.teamId as string) || '',
+    teamIds,
     supervisorEmail: (body.supervisorEmail as string) || '',
     displayName: (body.displayName as string | undefined)?.trim() || null,
   };
-  if (!row.email || !row.teamId || !row.supervisorEmail) {
-    return NextResponse.json({ error: 'email, teamId, supervisorEmail required' }, { status: 400 });
+  if (!row.email || !row.teamIds.length || !row.supervisorEmail) {
+    return NextResponse.json(
+      { error: 'email, at least one team (teamIds), and supervisorEmail required' },
+      { status: 400 }
+    );
   }
   try {
     await upsertRosterRow(row);

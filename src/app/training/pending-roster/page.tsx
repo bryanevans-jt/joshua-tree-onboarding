@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { getServerSession } from 'next-auth';
 import { redirect } from 'next/navigation';
 import { authOptions } from '@/lib/auth-options';
-import { getRosterRow, getTrainingSettings } from '@/lib/training-store';
+import { getRosterRow, getTrainingSettings, isTaggedSupervisor } from '@/lib/training-store';
 import { isApprovedAdmin } from '@/lib/approved-admins';
 
 export default async function TrainingPendingRosterPage() {
@@ -11,6 +11,10 @@ export default async function TrainingPendingRosterPage() {
   if (!email) redirect('/training/signin');
 
   if (await isApprovedAdmin(email)) {
+    redirect('/training');
+  }
+
+  if (await isTaggedSupervisor(email)) {
     redirect('/training');
   }
 

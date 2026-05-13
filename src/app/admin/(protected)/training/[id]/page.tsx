@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 interface SectionRow {
@@ -26,8 +27,9 @@ interface ModuleDetail {
 }
 
 export default function AdminEditTrainingModulePage({ params }: { params: { id: string } }) {
+  const router = useRouter();
   const { id } = params;
-  const [teams, setTeams] = useState<Array<{ id: string; label: string }>>([]);
+  const [teams, setTeams] = useState<Array<{ id: string; label: string; active?: boolean }>>([]);
   const [mod, setMod] = useState<ModuleDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +44,9 @@ export default function AdminEditTrainingModulePage({ params }: { params: { id: 
   );
   const [newTitle, setNewTitle] = useState('');
   const [newYoutube, setNewYoutube] = useState('');
+  const [deleting, setDeleting] = useState(false);
+
+  const activeTeams = teams.filter((t) => t.active !== false);
 
   async function load() {
     setLoading(true);
@@ -216,16 +221,25 @@ export default function AdminEditTrainingModulePage({ params }: { params: { id: 
   }
 
   return (
-    <div className="space-y-6">
-      <Link href="/admin/training" className="text-sm text-teal-600 hover:text-teal-700">
-        ← Modules
-      </Link>
+    <div className="training-admin-page space-y-6">
+      <div className="training-admin-hero rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-50 to-teal-50/80 p-5 shadow-sm">
+        <Link href="/admin/training" className="text-sm font-medium text-teal-700 hover:text-teal-800">
+          ← Training hub
+        </Link>
+        <p className="mt-2 max-w-3xl text-sm text-gray-600">
+          Sections are ordered steps (video or PDF). Optional quizzes gate completion. <strong>Bump version</strong>{' '}
+          resets learner progress for that section when you replace material.
+        </p>
+      </div>
       {error && (
         <div className="card border-red-200 bg-red-50 text-sm text-red-800">{error}</div>
       )}
 
-      <div className="card">
-        <h1 className="mb-4 text-xl font-semibold">Edit module</h1>
+      <div className="card border-teal-100 shadow-md">
+        <h1 className="mb-1 text-xl font-semibold text-gray-900">Edit module</h1>
+        <p className="mb-4 text-xs text-gray-500">
+          Company-wide modules unlock first for everyone. Team modules only appear for people on that team (or teams).
+        </p>
         <form onSubmit={saveMeta} className="space-y-3">
           <input className="input-field" value={name} onChange={(e) => setName(e.target.value)} />
           <input className="input-field" value={slug} onChange={(e) => setSlug(e.target.value)} />
@@ -244,7 +258,7 @@ export default function AdminEditTrainingModulePage({ params }: { params: { id: 
           </label>
           {!isCompanyWide && (
             <select className="input-field" value={teamId} onChange={(e) => setTeamId(e.target.value)}>
-              {teams.map((t) => (
+              {activeTeams.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.label}
                 </option>
@@ -254,6 +268,7 @@ export default function AdminEditTrainingModulePage({ params }: { params: { id: 
           <input
             type="number"
             className="input-field"
+            title="Sort order (lower appears first in admin lists)"
             value={moduleSortOrder}
             onChange={(e) => setModuleSortOrder(Number(e.target.value))}
           />
@@ -384,6 +399,43 @@ export default function AdminEditTrainingModulePage({ params }: { params: { id: 
             </li>
           ))}
         </ul>
+      </div>
+
+      <div className="card border-red-200 bg-red-50/40 shadow-sm">
+        <h2 className="text-sm font-semibold text-red-900">Danger zone</h2>
+        <p className="mt-1 text-xs text-red-800/90">
+          Delete this entire module, all sections, and related learner progress. This cannot be undone.
+        </p>
+        <button
+          type="button"
+          className="mt-3 rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-800 hover:bg-red-100 disabled:opacity-50"
+          disabled={deleting}
+          onClick={async () => {
+            if (!mod) return;
+            if (
+              !confirm(
+                `Permanently delete module "${mod.name}" and all of its sections and progress?`
+              )
+            ) {
+              return;
+            }
+            setDeleting(true);
+            setError(null);
+            try {
+              const res = await fetch(`/api/admin/training/modules/${id}`, { method: 'DELETE' });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok) {
+                setError(data.error || 'Delete failed');
+                return;
+              }
+              router.push('/admin/training');
+            } finally {
+              setDeleting(false);
+            }
+          }}
+        >
+          {deleting ? 'Deleting…' : 'Delete this module'}
+        </button>
       </div>
     </div>
   );

@@ -27,6 +27,12 @@ body {
   .card {
     @apply rounded-xl border border-gray-200 bg-white p-6 shadow-sm;
   }
+  .training-admin-page {
+    @apply max-w-5xl;
+  }
+  .training-admin-hero {
+    @apply ring-1 ring-black/5;
+  }
 }
 
 /* PDF.js annotation layer: form fields inside the viewer */
