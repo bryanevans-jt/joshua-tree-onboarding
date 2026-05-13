@@ -22,6 +22,8 @@ export default function TrainingRosterPage() {
   const [rowTeam, setRowTeam] = useState('');
   const [rowSup, setRowSup] = useState('');
   const [rowName, setRowName] = useState('');
+  /** When set, the form is editing this person (email field stays fixed). */
+  const [editingEmail, setEditingEmail] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -122,12 +124,38 @@ export default function TrainingRosterPage() {
           </div>
 
           <div className="card max-w-xl">
-            <h2 className="mb-2 text-sm font-semibold">Add / update roster row</h2>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold">
+                {editingEmail ? 'Edit roster entry' : 'Add someone to the roster'}
+              </h2>
+              {editingEmail && (
+                <button
+                  type="button"
+                  className="text-xs text-teal-600 hover:text-teal-700"
+                  onClick={() => {
+                    setEditingEmail(null);
+                    setRowEmail('');
+                    setRowSup('');
+                    setRowName('');
+                    if (teams[0]?.id) setRowTeam(teams[0].id);
+                  }}
+                >
+                  Cancel edit — add new instead
+                </button>
+              )}
+            </div>
+            <p className="mb-3 text-xs text-gray-600">
+              {editingEmail
+                ? 'Change team, supervisor, or display name, then save. To use a different email, remove this row and add a new one.'
+                : 'Saving with an email that is already on the roster updates that row (same as Edit). New emails are added.'}
+            </p>
             <div className="grid gap-2 text-sm">
               <input
-                className="input-field"
-                placeholder="Employee email"
+                className={`input-field${editingEmail ? ' cursor-not-allowed bg-gray-50' : ''}`}
+                placeholder="Employee email (@thejoshuatree.org)"
                 value={rowEmail}
+                readOnly={!!editingEmail}
+                title={editingEmail ? 'Email cannot be changed here' : undefined}
                 onChange={(e) => setRowEmail(e.target.value)}
               />
               <select
@@ -172,12 +200,15 @@ export default function TrainingRosterPage() {
                     setError(data.error || 'Failed');
                     return;
                   }
+                  setEditingEmail(null);
                   setRowEmail('');
+                  setRowSup('');
                   setRowName('');
+                  if (teams[0]?.id) setRowTeam(teams[0].id);
                   void load();
                 }}
               >
-                Save roster row
+                {editingEmail ? 'Save changes' : 'Add to roster'}
               </button>
             </div>
           </div>
@@ -188,22 +219,46 @@ export default function TrainingRosterPage() {
               <thead>
                 <tr className="border-b text-left text-gray-600">
                   <th className="py-2">Email</th>
+                  <th>Name</th>
                   <th>Team</th>
                   <th>Supervisor</th>
-                  <th />
+                  <th className="text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {roster.map((r) => (
                   <tr key={r.email} className="border-b border-gray-100">
                     <td className="py-1.5">{r.email}</td>
+                    <td className="text-gray-700">{r.displayName?.trim() || '—'}</td>
                     <td>{teams.find((t) => t.id === r.teamId)?.label ?? r.teamId}</td>
                     <td>{r.supervisorEmail}</td>
-                    <td className="text-right">
+                    <td className="text-right whitespace-nowrap">
                       <button
                         type="button"
-                        className="text-red-600"
+                        className="mr-3 text-teal-600 hover:text-teal-700"
+                        onClick={() => {
+                          setError(null);
+                          setEditingEmail(r.email);
+                          setRowEmail(r.email);
+                          setRowTeam(r.teamId);
+                          setRowSup(r.supervisorEmail);
+                          setRowName(r.displayName?.trim() ?? '');
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="text-red-600 hover:text-red-700"
                         onClick={async () => {
+                          if (editingEmail === r.email) {
+                            setEditingEmail(null);
+                            setRowEmail('');
+                            setRowSup('');
+                            setRowName('');
+                            if (teams[0]?.id) setRowTeam(teams[0].id);
+                          }
                           await fetch(
                             `/api/admin/training/roster?email=${encodeURIComponent(r.email)}`,
                             { method: 'DELETE' }
