@@ -32,7 +32,13 @@ export default function AdminTrainingModulesPage() {
             required videos and optional presentation PDFs.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Link href="/admin/training/roster" className="btn-secondary">
+            Roster & supervisors
+          </Link>
+          <Link href="/admin/training/teams" className="btn-secondary">
+            Teams
+          </Link>
           <Link href="/admin/training/settings" className="btn-secondary">
             Training settings
           </Link>

@@ -67,7 +67,7 @@ export default function AdminSettingsPage() {
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">
-            HR Director email
+            Administration Director email
           </label>
           <input
             type="email"

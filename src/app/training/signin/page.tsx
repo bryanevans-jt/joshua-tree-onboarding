@@ -12,7 +12,7 @@ export default async function TrainingSignInPage({ searchParams }: PageProps) {
   const { callbackUrl } = await searchParams;
   const destination = callbackUrl?.trim() && callbackUrl.startsWith('/training')
     ? callbackUrl
-    : '/training';
+    : '/training/modules';
 
   if (session) {
     redirect(destination);
@@ -27,7 +27,7 @@ export default async function TrainingSignInPage({ searchParams }: PageProps) {
         </p>
         <TrainingSignInButton callbackUrl={destination} />
         <p className="mt-6 text-xs text-gray-500">
-          If you don’t have access, contact your administrator.
+          If you don’t have access, contact the Director of Communication & Creative.
         </p>
       </div>
     </div>

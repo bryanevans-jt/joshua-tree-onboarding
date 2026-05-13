@@ -1,21 +1,218 @@
 import { getSupabase } from './supabase-server';
 import type {
   TrainingModule,
-  TrainingVideo,
+  TrainingRosterRow,
+  TrainingSection,
   TrainingSettings,
+  TrainingTeam,
 } from './training-types';
+import { parseQuizJson, type TrainingQuiz } from './training-quiz';
+
+function normEmail(e: string) {
+  return e.trim().toLowerCase();
+}
+
+function rowTeam(r: any): TrainingTeam {
+  return {
+    id: r.id,
+    slug: r.slug,
+    label: r.label,
+    sortOrder: r.sort_order ?? 0,
+    active: r.active !== false,
+  };
+}
+
+function rowModule(r: any): TrainingModule {
+  return {
+    id: r.id,
+    name: r.name,
+    slug: r.slug,
+    description: r.description ?? null,
+    isCompanyWide: !!r.is_company_wide,
+    teamId: r.team_id ?? null,
+    moduleSortOrder: r.module_sort_order ?? 0,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at ?? null,
+  };
+}
+
+function rowSection(r: any): TrainingSection {
+  return {
+    id: r.id,
+    moduleId: r.module_id,
+    orderIndex: r.order_index,
+    kind: r.kind,
+    title: r.title,
+    youtubeUrl: r.youtube_url ?? null,
+    pdfKey: r.pdf_key ?? null,
+    quiz: parseQuizJson(r.quiz_json),
+    contentVersion: r.content_version ?? 1,
+    summary: r.summary ?? null,
+    estimatedMinutes: r.estimated_minutes ?? null,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at ?? null,
+  };
+}
+
+// ---------- Teams ----------
+
+export async function listTeams(): Promise<TrainingTeam[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('training_teams')
+    .select('*')
+    .eq('active', true)
+    .order('sort_order', { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(rowTeam);
+}
+
+export async function adminListAllTeams(): Promise<TrainingTeam[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('training_teams')
+    .select('*')
+    .order('sort_order', { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(rowTeam);
+}
+
+export async function adminUpsertTeam(input: {
+  id?: string;
+  slug: string;
+  label: string;
+  sortOrder: number;
+  active: boolean;
+}): Promise<TrainingTeam> {
+  const supabase = getSupabase();
+  const slug = input.slug.trim().toLowerCase().replace(/\s+/g, '-');
+  const row = {
+    slug,
+    label: input.label.trim(),
+    sort_order: input.sortOrder,
+    active: input.active,
+  };
+  if (input.id) {
+    const { data, error } = await supabase
+      .from('training_teams')
+      .update(row)
+      .eq('id', input.id)
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return rowTeam(data);
+  }
+  const { data, error } = await supabase.from('training_teams').insert(row).select().single();
+  if (error) throw new Error(error.message);
+  return rowTeam(data);
+}
+
+// ---------- Supervisors (tagged emails) ----------
+
+export async function listTaggedSupervisors(): Promise<string[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('training_supervisors')
+    .select('email')
+    .order('email', { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r: { email: string }) => normEmail(r.email));
+}
+
+export async function addTaggedSupervisor(email: string): Promise<void> {
+  const supabase = getSupabase();
+  const e = normEmail(email);
+  if (!e) throw new Error('Email required');
+  const { error } = await supabase.from('training_supervisors').insert({ email: e });
+  if (error && error.code !== '23505') throw new Error(error.message);
+}
+
+export async function removeTaggedSupervisor(email: string): Promise<void> {
+  const supabase = getSupabase();
+  await supabase.from('training_supervisors').delete().eq('email', normEmail(email));
+}
+
+export async function isTaggedSupervisor(email: string): Promise<boolean> {
+  const supabase = getSupabase();
+  const { data } = await supabase
+    .from('training_supervisors')
+    .select('email')
+    .eq('email', normEmail(email))
+    .maybeSingle();
+  return !!data;
+}
+
+// ---------- Roster ----------
+
+export async function getRosterRow(email: string): Promise<TrainingRosterRow | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('training_roster')
+    .select('*')
+    .eq('email', normEmail(email))
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  return {
+    email: data.email,
+    teamId: data.team_id,
+    supervisorEmail: normEmail(data.supervisor_email),
+    displayName: data.display_name ?? null,
+  };
+}
+
+export async function listRoster(): Promise<TrainingRosterRow[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('training_roster')
+    .select('*')
+    .order('email', { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r: any) => ({
+    email: r.email,
+    teamId: r.team_id,
+    supervisorEmail: normEmail(r.supervisor_email),
+    displayName: r.display_name ?? null,
+  }));
+}
+
+export async function upsertRosterRow(row: TrainingRosterRow): Promise<void> {
+  const supabase = getSupabase();
+  const sup = normEmail(row.supervisorEmail);
+  const tagged = await isTaggedSupervisor(sup);
+  if (!tagged) {
+    throw new Error('Supervisor email must be tagged as a supervisor first.');
+  }
+  const { error } = await supabase.from('training_roster').upsert(
+    {
+      email: normEmail(row.email),
+      team_id: row.teamId,
+      supervisor_email: sup,
+      display_name: row.displayName?.trim() || null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'email' }
+  );
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteRosterRow(email: string): Promise<void> {
+  const supabase = getSupabase();
+  await supabase.from('training_roster').delete().eq('email', normEmail(email));
+}
 
 // ---------- Modules ----------
 
-function rowToModule(row: any): TrainingModule {
-  return {
-    id: row.id,
-    name: row.name,
-    slug: row.slug,
-    description: row.description ?? undefined,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at ?? undefined,
-  };
+export async function listModules(): Promise<TrainingModule[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('training_modules')
+    .select('*')
+    .order('is_company_wide', { ascending: false })
+    .order('module_sort_order', { ascending: true })
+    .order('name', { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(rowModule);
 }
 
 export async function getModuleBySlug(slug: string): Promise<TrainingModule | null> {
@@ -26,44 +223,287 @@ export async function getModuleBySlug(slug: string): Promise<TrainingModule | nu
     .eq('slug', slug)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  return data ? rowToModule(data) : null;
+  return data ? rowModule(data) : null;
 }
 
-export async function listModules(): Promise<TrainingModule[]> {
+export async function getModuleById(id: string): Promise<TrainingModule | null> {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from('training_modules')
     .select('*')
-    .order('name', { ascending: true });
+    .eq('id', id)
+    .maybeSingle();
   if (error) throw new Error(error.message);
-  return (data ?? []).map(rowToModule);
+  return data ? rowModule(data) : null;
 }
 
-// ---------- Videos ----------
-
-function rowToVideo(row: any): TrainingVideo {
-  return {
-    id: row.id,
-    moduleId: row.module_id,
-    title: row.title,
-    youtubeUrl: row.youtube_url,
-    version: row.version,
-    orderIndex: row.order_index,
-    presentationPdfKey: row.presentation_pdf_key ?? undefined,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at ?? undefined,
-  };
-}
-
-export async function listVideosForModule(moduleId: string): Promise<TrainingVideo[]> {
+export async function createModule(input: {
+  name: string;
+  slug: string;
+  description?: string | null;
+  isCompanyWide: boolean;
+  teamId?: string | null;
+  moduleSortOrder?: number;
+}): Promise<TrainingModule> {
   const supabase = getSupabase();
   const { data, error } = await supabase
-    .from('training_videos')
+    .from('training_modules')
+    .insert({
+      name: input.name.trim(),
+      slug: input.slug.trim(),
+      description: input.description?.trim() || null,
+      is_company_wide: input.isCompanyWide,
+      team_id: input.isCompanyWide ? null : input.teamId ?? null,
+      module_sort_order: input.moduleSortOrder ?? 0,
+      created_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return rowModule(data);
+}
+
+export async function updateModule(
+  id: string,
+  input: {
+    name: string;
+    slug: string;
+    description?: string | null;
+    isCompanyWide: boolean;
+    teamId?: string | null;
+    moduleSortOrder?: number;
+  }
+): Promise<TrainingModule> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('training_modules')
+    .update({
+      name: input.name.trim(),
+      slug: input.slug.trim(),
+      description: input.description?.trim() || null,
+      is_company_wide: input.isCompanyWide,
+      team_id: input.isCompanyWide ? null : input.teamId ?? null,
+      module_sort_order: input.moduleSortOrder ?? 0,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return rowModule(data);
+}
+
+export async function deleteModule(id: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.from('training_modules').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+export async function listCompanyWideModules(): Promise<TrainingModule[]> {
+  const all = await listModules();
+  return all.filter((m) => m.isCompanyWide);
+}
+
+export async function getTeamModuleForTeam(teamId: string): Promise<TrainingModule | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('training_modules')
+    .select('*')
+    .eq('is_company_wide', false)
+    .eq('team_id', teamId)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? rowModule(data) : null;
+}
+
+// ---------- Sections ----------
+
+export async function listSectionsForModule(moduleId: string): Promise<TrainingSection[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('training_sections')
     .select('*')
     .eq('module_id', moduleId)
     .order('order_index', { ascending: true });
   if (error) throw new Error(error.message);
-  return (data ?? []).map(rowToVideo);
+  return (data ?? []).map(rowSection);
+}
+
+export async function getSectionById(sectionId: string): Promise<TrainingSection | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('training_sections')
+    .select('*')
+    .eq('id', sectionId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? rowSection(data) : null;
+}
+
+export async function createSection(input: {
+  moduleId: string;
+  orderIndex: number;
+  kind: 'video' | 'pdf';
+  title: string;
+  youtubeUrl?: string | null;
+  pdfKey?: string | null;
+  quiz?: TrainingQuiz | null;
+  summary?: string | null;
+  estimatedMinutes?: number | null;
+}): Promise<TrainingSection> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('training_sections')
+    .insert({
+      module_id: input.moduleId,
+      order_index: input.orderIndex,
+      kind: input.kind,
+      title: input.title.trim(),
+      youtube_url: input.kind === 'video' ? input.youtubeUrl?.trim() || null : null,
+      pdf_key: input.kind === 'pdf' ? input.pdfKey ?? null : null,
+      quiz_json: input.quiz && input.quiz.questions.length ? input.quiz : null,
+      content_version: 1,
+      summary: input.summary?.trim() || null,
+      estimated_minutes:
+        input.estimatedMinutes != null ? Math.max(0, Math.floor(input.estimatedMinutes)) : null,
+      created_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return rowSection(data);
+}
+
+export async function updateSection(
+  sectionId: string,
+  input: {
+    title: string;
+    youtubeUrl?: string | null;
+    pdfKey?: string | null;
+    quiz?: TrainingQuiz | null;
+    summary?: string | null;
+    estimatedMinutes?: number | null;
+  }
+): Promise<TrainingSection> {
+  const supabase = getSupabase();
+  const { data: existing } = await supabase
+    .from('training_sections')
+    .select('kind')
+    .eq('id', sectionId)
+    .single();
+  const kind = existing?.kind as 'video' | 'pdf';
+  const { data, error } = await supabase
+    .from('training_sections')
+    .update({
+      title: input.title.trim(),
+      youtube_url: kind === 'video' ? input.youtubeUrl?.trim() || null : null,
+      pdf_key: kind === 'pdf' ? input.pdfKey ?? null : null,
+      quiz_json: input.quiz && input.quiz.questions.length ? input.quiz : null,
+      summary: input.summary?.trim() || null,
+      estimated_minutes:
+        input.estimatedMinutes != null ? Math.max(0, Math.floor(input.estimatedMinutes)) : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', sectionId)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return rowSection(data);
+}
+
+export async function reorderSections(moduleId: string, orderedSectionIds: string[]): Promise<void> {
+  const supabase = getSupabase();
+  const sections = await listSectionsForModule(moduleId);
+  const set = new Set(sections.map((s) => s.id));
+  if (orderedSectionIds.length !== set.size || !orderedSectionIds.every((id) => set.has(id))) {
+    throw new Error('Invalid section order');
+  }
+  for (let i = 0; i < orderedSectionIds.length; i++) {
+    const { error } = await supabase
+      .from('training_sections')
+      .update({ order_index: i + 1, updated_at: new Date().toISOString() })
+      .eq('id', orderedSectionIds[i])
+      .eq('module_id', moduleId);
+    if (error) throw new Error(error.message);
+  }
+}
+
+export async function deleteSection(sectionId: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.from('training_sections').delete().eq('id', sectionId);
+  if (error) throw new Error(error.message);
+}
+
+export async function bumpSectionContentVersion(sectionId: string): Promise<TrainingSection> {
+  const supabase = getSupabase();
+  const { data: cur } = await supabase
+    .from('training_sections')
+    .select('content_version')
+    .eq('id', sectionId)
+    .single();
+  const next = (cur?.content_version as number) + 1;
+  const { data, error } = await supabase
+    .from('training_sections')
+    .update({
+      content_version: next,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', sectionId)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  await supabase.from('training_section_progress').delete().eq('section_id', sectionId);
+  return rowSection(data);
+}
+
+export function serializeSectionLearner(s: TrainingSection) {
+  return {
+    id: s.id,
+    title: s.title,
+    kind: s.kind,
+    orderIndex: s.orderIndex,
+    youtubeUrl: s.youtubeUrl ?? null,
+    hasPdf: !!s.pdfKey,
+    summary: s.summary ?? null,
+    estimatedMinutes: s.estimatedMinutes ?? null,
+    contentVersion: s.contentVersion,
+    quiz: s.quiz
+      ? {
+          questions: s.quiz.questions.map((q) => ({
+            id: q.id,
+            prompt: q.prompt,
+            choices: q.choices,
+          })),
+        }
+      : null,
+  };
+}
+
+export function serializeSection(s: TrainingSection) {
+  return {
+    id: s.id,
+    moduleId: s.moduleId,
+    orderIndex: s.orderIndex,
+    kind: s.kind,
+    title: s.title,
+    youtubeUrl: s.youtubeUrl ?? null,
+    hasPdf: !!s.pdfKey,
+    hasQuiz: !!(s.quiz && s.quiz.questions.length),
+    quizQuestionCount: s.quiz?.questions.length ?? 0,
+    contentVersion: s.contentVersion,
+    summary: s.summary ?? null,
+    estimatedMinutes: s.estimatedMinutes ?? null,
+  };
+}
+
+export function serializeSectionAdmin(s: TrainingSection) {
+  return {
+    ...serializeSection(s),
+    youtubeUrl: s.youtubeUrl ?? null,
+    pdfKey: s.pdfKey ?? null,
+    quiz: s.quiz,
+  };
 }
 
 // ---------- Settings ----------
@@ -75,22 +515,19 @@ export async function getTrainingSettings(): Promise<TrainingSettings> {
     .select('*')
     .eq('id', 1)
     .maybeSingle();
-  if (error) {
-    // Fall back to env-only defaults if table not present yet.
+  if (error || !data) {
     return {
       allowedDomains: [],
       notificationEmails: [],
-    };
-  }
-  if (!data) {
-    return {
-      allowedDomains: [],
-      notificationEmails: [],
+      communicationsContactName: null,
+      communicationsContactEmail: null,
     };
   }
   return {
     allowedDomains: (data.allowed_domains as string[]) ?? [],
     notificationEmails: (data.notification_emails as string[]) ?? [],
+    communicationsContactName: data.communications_contact_name ?? null,
+    communicationsContactEmail: data.communications_contact_email ?? null,
   };
 }
 
@@ -98,16 +535,19 @@ export async function updateTrainingSettings(
   updates: Partial<TrainingSettings>
 ): Promise<TrainingSettings> {
   const supabase = getSupabase();
-  let existing: TrainingSettings;
-  try {
-    existing = await getTrainingSettings();
-  } catch {
-    existing = { allowedDomains: [], notificationEmails: [] };
-  }
-  const row = {
+  const existing = await getTrainingSettings();
+  const row: Record<string, unknown> = {
     id: 1,
     allowed_domains: updates.allowedDomains ?? existing.allowedDomains,
     notification_emails: updates.notificationEmails ?? existing.notificationEmails,
+    communications_contact_name:
+      updates.communicationsContactName !== undefined
+        ? updates.communicationsContactName
+        : existing.communicationsContactName,
+    communications_contact_email:
+      updates.communicationsContactEmail !== undefined
+        ? updates.communicationsContactEmail
+        : existing.communicationsContactEmail,
     updated_at: new Date().toISOString(),
   };
   const { data, error } = await supabase
@@ -119,6 +559,7 @@ export async function updateTrainingSettings(
   return {
     allowedDomains: (data.allowed_domains as string[]) ?? [],
     notificationEmails: (data.notification_emails as string[]) ?? [],
+    communicationsContactName: data.communications_contact_name ?? null,
+    communicationsContactEmail: data.communications_contact_email ?? null,
   };
 }
-

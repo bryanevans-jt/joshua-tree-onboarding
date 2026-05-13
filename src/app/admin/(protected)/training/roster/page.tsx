@@ -1,0 +1,226 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+
+interface Team {
+  id: string;
+  slug: string;
+  label: string;
+}
+
+export default function TrainingRosterPage() {
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [roster, setRoster] = useState<
+    Array<{ email: string; teamId: string; supervisorEmail: string; displayName?: string | null }>
+  >([]);
+  const [supervisors, setSupervisors] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [newSup, setNewSup] = useState('');
+  const [rowEmail, setRowEmail] = useState('');
+  const [rowTeam, setRowTeam] = useState('');
+  const [rowSup, setRowSup] = useState('');
+  const [rowName, setRowName] = useState('');
+
+  async function load() {
+    setLoading(true);
+    setError(null);
+    try {
+      const [t, r, s] = await Promise.all([
+        fetch('/api/admin/training/teams').then((x) => x.json()),
+        fetch('/api/admin/training/roster').then((x) => x.json()),
+        fetch('/api/admin/training/supervisors').then((x) => x.json()),
+      ]);
+      setTeams(t.teams ?? []);
+      setRoster(r.roster ?? []);
+      setSupervisors(s.emails ?? []);
+      if (!rowTeam && (t.teams?.[0]?.id ?? '')) setRowTeam(t.teams[0].id);
+    } catch {
+      setError('Failed to load');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h1 className="text-xl font-semibold">Training roster & supervisors</h1>
+          <p className="text-sm text-gray-600">
+            Tag supervisor emails first, then assign each employee to a team and supervisor.
+          </p>
+        </div>
+        <Link href="/admin/training" className="text-sm text-teal-600 hover:text-teal-700">
+          ← Modules
+        </Link>
+      </div>
+
+      {error && (
+        <div className="card border-red-200 bg-red-50 text-sm text-red-800">{error}</div>
+      )}
+      {loading && <div className="card text-sm text-gray-500">Loading…</div>}
+
+      {!loading && (
+        <>
+          <div className="card max-w-xl">
+            <h2 className="mb-2 text-sm font-semibold">Supervisor emails (tagged)</h2>
+            <div className="mb-3 flex gap-2">
+              <input
+                className="input-field flex-1"
+                type="email"
+                placeholder="supervisor@thejoshuatree.org"
+                value={newSup}
+                onChange={(e) => setNewSup(e.target.value)}
+              />
+              <button
+                type="button"
+                className="btn-secondary whitespace-nowrap"
+                onClick={async () => {
+                  const res = await fetch('/api/admin/training/supervisors', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: newSup }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) {
+                    setError(data.error || 'Failed');
+                    return;
+                  }
+                  setNewSup('');
+                  void load();
+                }}
+              >
+                Add
+              </button>
+            </div>
+            <ul className="space-y-1 text-xs">
+              {supervisors.map((e) => (
+                <li key={e} className="flex justify-between rounded border border-gray-100 px-2 py-1">
+                  <span>{e}</span>
+                  <button
+                    type="button"
+                    className="text-red-600"
+                    onClick={async () => {
+                      await fetch(
+                        `/api/admin/training/supervisors?email=${encodeURIComponent(e)}`,
+                        { method: 'DELETE' }
+                      );
+                      void load();
+                    }}
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="card max-w-xl">
+            <h2 className="mb-2 text-sm font-semibold">Add / update roster row</h2>
+            <div className="grid gap-2 text-sm">
+              <input
+                className="input-field"
+                placeholder="Employee email"
+                value={rowEmail}
+                onChange={(e) => setRowEmail(e.target.value)}
+              />
+              <select
+                className="input-field"
+                value={rowTeam}
+                onChange={(e) => setRowTeam(e.target.value)}
+              >
+                {teams.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                className="input-field"
+                placeholder="Supervisor email (must be tagged above)"
+                value={rowSup}
+                onChange={(e) => setRowSup(e.target.value)}
+              />
+              <input
+                className="input-field"
+                placeholder="Display name (optional)"
+                value={rowName}
+                onChange={(e) => setRowName(e.target.value)}
+              />
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={async () => {
+                  const res = await fetch('/api/admin/training/roster', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      email: rowEmail.trim(),
+                      teamId: rowTeam,
+                      supervisorEmail: rowSup.trim(),
+                      displayName: rowName.trim() || null,
+                    }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) {
+                    setError(data.error || 'Failed');
+                    return;
+                  }
+                  setRowEmail('');
+                  setRowName('');
+                  void load();
+                }}
+              >
+                Save roster row
+              </button>
+            </div>
+          </div>
+
+          <div className="card">
+            <h2 className="mb-2 text-sm font-semibold">Current roster</h2>
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b text-left text-gray-600">
+                  <th className="py-2">Email</th>
+                  <th>Team</th>
+                  <th>Supervisor</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {roster.map((r) => (
+                  <tr key={r.email} className="border-b border-gray-100">
+                    <td className="py-1.5">{r.email}</td>
+                    <td>{teams.find((t) => t.id === r.teamId)?.label ?? r.teamId}</td>
+                    <td>{r.supervisorEmail}</td>
+                    <td className="text-right">
+                      <button
+                        type="button"
+                        className="text-red-600"
+                        onClick={async () => {
+                          await fetch(
+                            `/api/admin/training/roster?email=${encodeURIComponent(r.email)}`,
+                            { method: 'DELETE' }
+                          );
+                          void load();
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

@@ -11,14 +11,14 @@ function ensureLocalDir() {
   }
 }
 
-export async function uploadTrainingPdf(
+export async function uploadTrainingSectionPdf(
   moduleId: string,
-  videoId: string,
+  sectionId: string,
   filename: string,
   buffer: Buffer
 ): Promise<string> {
   const safeName = filename.replace(/[^\w.\-]+/g, '_');
-  const key = `${moduleId}/${videoId}/${safeName}`;
+  const key = `${moduleId}/sections/${sectionId}/${safeName}`;
 
   if (hasSupabase()) {
     const supabase = getSupabase();

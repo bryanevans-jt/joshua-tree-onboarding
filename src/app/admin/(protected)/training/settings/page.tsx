@@ -3,13 +3,17 @@
 import { useEffect, useState } from 'react';
 
 export default function TrainingSettingsPage() {
+  const [communicationsContactName, setCommunicationsContactName] = useState('');
+  const [communicationsContactEmail, setCommunicationsContactEmail] = useState('');
   const [allowedDomains, setAllowedDomains] = useState<string[]>([]);
   const [notificationEmails, setNotificationEmails] = useState<string[]>([]);
-  const [newDomain, setNewDomain] = useState('');
-  const [newEmail, setNewEmail] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [testTo, setTestTo] = useState('');
+  const [testModuleName, setTestModuleName] = useState('Sample training module');
+  const [testBusy, setTestBusy] = useState(false);
+  const [testMessage, setTestMessage] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/admin/training/settings')
@@ -17,9 +21,34 @@ export default function TrainingSettingsPage() {
       .then((data) => {
         setAllowedDomains(data.allowedDomains ?? []);
         setNotificationEmails(data.notificationEmails ?? []);
+        setCommunicationsContactName(data.communicationsContactName ?? '');
+        setCommunicationsContactEmail(data.communicationsContactEmail ?? '');
       })
       .catch(() => setError('Failed to load settings'));
   }, []);
+
+  async function sendTestCompletionEmail() {
+    setTestBusy(true);
+    setTestMessage(null);
+    setError(null);
+    try {
+      const res = await fetch('/api/admin/training/test-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: testTo.trim() || undefined,
+          moduleName: testModuleName.trim() || 'Sample training module',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send test email');
+      setTestMessage(`Sent test email to ${data.sentTo}.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to send test email');
+    } finally {
+      setTestBusy(false);
+    }
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -29,12 +58,19 @@ export default function TrainingSettingsPage() {
       const res = await fetch('/api/admin/training/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ allowedDomains, notificationEmails }),
+        body: JSON.stringify({
+          allowedDomains,
+          notificationEmails,
+          communicationsContactName: communicationsContactName.trim() || null,
+          communicationsContactEmail: communicationsContactEmail.trim().toLowerCase() || null,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to save settings');
       setAllowedDomains(data.allowedDomains ?? []);
       setNotificationEmails(data.notificationEmails ?? []);
+      setCommunicationsContactName(data.communicationsContactName ?? '');
+      setCommunicationsContactEmail(data.communicationsContactEmail ?? '');
       setSaved(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to save settings');
@@ -48,8 +84,11 @@ export default function TrainingSettingsPage() {
       <div className="card max-w-2xl">
         <h1 className="mb-2 text-xl font-semibold">Training settings</h1>
         <p className="mb-4 text-sm text-gray-600">
-          Control which email domains can access training modules and who receives completion
-          notification emails.
+          Training sign-in is limited to <span className="font-mono">@thejoshuatree.org</span>{' '}
+          accounts. When someone is not yet on the roster, they see instructions to contact the
+          communications contact below. When training is fully complete, the trainee and the
+          Administration Director email from main Settings receive a summary (including quiz
+          attempts).
         </p>
 
         {error && (
@@ -65,117 +104,31 @@ export default function TrainingSettingsPage() {
 
         <div className="space-y-4">
           <section>
-            <h2 className="mb-1 text-sm font-semibold text-gray-800">Allowed domains</h2>
-            <p className="mb-3 text-xs text-gray-500">
-              Users must sign in with a Google account from one of these domains to access
-              training modules (in addition to your primary Workspace domain).
-            </p>
-            <div className="mb-3 flex gap-2">
-              <input
-                type="text"
-                value={newDomain}
-                onChange={(e) => setNewDomain(e.target.value)}
-                placeholder="example.org"
-                className="input-field flex-1"
-              />
-              <button
-                type="button"
-                className="btn-secondary whitespace-nowrap"
-                onClick={() => {
-                  const d = newDomain.trim().toLowerCase();
-                  if (!d) return;
-                  if (allowedDomains.includes(d)) return;
-                  setAllowedDomains((prev) => [...prev, d]);
-                  setNewDomain('');
-                  setSaved(false);
-                }}
-              >
-                Add domain
-              </button>
-            </div>
-            <ul className="space-y-1">
-              {allowedDomains.map((d) => (
-                <li
-                  key={d}
-                  className="flex items-center justify-between rounded border border-gray-200 bg-gray-50 px-3 py-1 text-xs"
-                >
-                  <span className="text-gray-800">{d}</span>
-                  <button
-                    type="button"
-                    className="text-red-600 hover:text-red-700"
-                    onClick={() => {
-                      setAllowedDomains((prev) => prev.filter((x) => x !== d));
-                      setSaved(false);
-                    }}
-                  >
-                    Remove
-                  </button>
-                </li>
-              ))}
-              {allowedDomains.length === 0 && (
-                <li className="text-xs text-gray-500">
-                  No extra domains configured. Only your primary Workspace domain is allowed.
-                </li>
-              )}
-            </ul>
-          </section>
-
-          <section className="pt-4 border-t border-gray-200">
             <h2 className="mb-1 text-sm font-semibold text-gray-800">
-              Completion notification recipients
+              Director of Communication & Creative (roster help)
             </h2>
             <p className="mb-3 text-xs text-gray-500">
-              When a new hire completes all videos in a module, an email is sent to these
-              addresses (and the HR Director email, if configured in main Settings).
+              Shown to employees who can sign in but are not yet assigned on the training roster.
             </p>
-            <div className="mb-3 flex gap-2">
+            <div className="mb-3">
+              <label className="mb-1 block text-xs font-medium text-gray-700">Display name</label>
+              <input
+                className="input-field"
+                value={communicationsContactName}
+                onChange={(e) => setCommunicationsContactName(e.target.value)}
+                placeholder="Director of Communication & Creative"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-700">Contact email</label>
               <input
                 type="email"
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                placeholder="name@example.com"
-                className="input-field flex-1"
+                className="input-field"
+                value={communicationsContactEmail}
+                onChange={(e) => setCommunicationsContactEmail(e.target.value)}
+                placeholder="name@thejoshuatree.org"
               />
-              <button
-                type="button"
-                className="btn-secondary whitespace-nowrap"
-                onClick={() => {
-                  const e = newEmail.trim().toLowerCase();
-                  if (!e) return;
-                  if (notificationEmails.includes(e)) return;
-                  setNotificationEmails((prev) => [e, ...prev]);
-                  setNewEmail('');
-                  setSaved(false);
-                }}
-              >
-                Add recipient
-              </button>
             </div>
-            <ul className="space-y-1">
-              {notificationEmails.map((e) => (
-                <li
-                  key={e}
-                  className="flex items-center justify-between rounded border border-gray-200 bg-gray-50 px-3 py-1 text-xs"
-                >
-                  <span className="text-gray-800">{e}</span>
-                  <button
-                    type="button"
-                    className="text-red-600 hover:text-red-700"
-                    onClick={() => {
-                      setNotificationEmails((prev) => prev.filter((x) => x !== e));
-                      setSaved(false);
-                    }}
-                  >
-                    Remove
-                  </button>
-                </li>
-              ))}
-              {notificationEmails.length === 0 && (
-                <li className="text-xs text-gray-500">
-                  No additional recipients configured yet.
-                </li>
-              )}
-            </ul>
           </section>
 
           <button
@@ -188,7 +141,52 @@ export default function TrainingSettingsPage() {
           </button>
         </div>
       </div>
+
+      <div className="card max-w-2xl">
+        <h2 className="mb-1 text-sm font-semibold text-gray-800">Test completion email</h2>
+        <p className="mb-3 text-xs text-gray-500">
+          Sends a sample &quot;[TEST] Training complete&quot; message. Leave Send to blank to use your
+          signed-in admin email.
+        </p>
+        {testMessage && (
+          <p className="mb-3 text-sm text-teal-700" role="status">
+            {testMessage}
+          </p>
+        )}
+        <div className="mb-3 grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-700">
+              Send to (optional)
+            </label>
+            <input
+              type="email"
+              className="input-field"
+              value={testTo}
+              onChange={(e) => setTestTo(e.target.value)}
+              placeholder="you@thejoshuatree.org"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-700">
+              Sample module name
+            </label>
+            <input
+              type="text"
+              className="input-field"
+              value={testModuleName}
+              onChange={(e) => setTestModuleName(e.target.value)}
+            />
+          </div>
+        </div>
+        <button
+          type="button"
+          className="btn-secondary text-sm"
+          disabled={testBusy}
+          onClick={() => void sendTestCompletionEmail()}
+        >
+          {testBusy ? 'Sending…' : 'Send test email'}
+        </button>
+      </div>
     </div>
   );
 }
-

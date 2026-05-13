@@ -34,11 +34,21 @@ export async function POST(request: Request) {
   const notificationEmails = Array.isArray(body.notificationEmails)
     ? body.notificationEmails.map((e: string) => e.trim().toLowerCase()).filter(Boolean)
     : undefined;
+  const communicationsContactName =
+    body.communicationsContactName !== undefined
+      ? String(body.communicationsContactName || '').trim() || null
+      : undefined;
+  const communicationsContactEmail =
+    body.communicationsContactEmail !== undefined
+      ? String(body.communicationsContactEmail || '').trim().toLowerCase() || null
+      : undefined;
 
   try {
     const updated = await updateTrainingSettings({
       allowedDomains,
       notificationEmails,
+      communicationsContactName,
+      communicationsContactEmail,
     });
     return NextResponse.json(updated);
   } catch (e) {
@@ -48,4 +58,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

@@ -1,165 +1,196 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
-interface VideoRow {
+interface SectionRow {
   id: string;
   title: string;
-  youtubeUrl: string;
-  presentationPdfKey?: string | null;
-  version?: number;
+  kind: 'video' | 'pdf';
+  orderIndex: number;
+  youtubeUrl?: string | null;
+  pdfKey?: string | null;
+  quiz: unknown;
+  contentVersion: number;
 }
 
 interface ModuleDetail {
   id: string;
   name: string;
   slug: string;
-  description?: string;
-  videos: VideoRow[];
+  description?: string | null;
+  isCompanyWide: boolean;
+  teamId: string | null;
+  moduleSortOrder: number;
+  sections: SectionRow[];
 }
 
-interface PageProps {
-  params: {
-    id: string;
-  };
-}
-
-export default function AdminEditTrainingModulePage({ params }: PageProps) {
+export default function AdminEditTrainingModulePage({ params }: { params: { id: string } }) {
   const { id } = params;
-  const [module, setModule] = useState<ModuleDetail | null>(null);
+  const [teams, setTeams] = useState<Array<{ id: string; label: string }>>([]);
+  const [mod, setMod] = useState<ModuleDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [savingMeta, setSavingMeta] = useState(false);
-  const [addingVideo, setAddingVideo] = useState(false);
-  const [uploadingPdfFor, setUploadingPdfFor] = useState<string | null>(null);
-
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
+  const [isCompanyWide, setIsCompanyWide] = useState(true);
+  const [teamId, setTeamId] = useState('');
+  const [moduleSortOrder, setModuleSortOrder] = useState(0);
+  const [quizJson, setQuizJson] = useState(
+    '{"questions":[{"id":"q1","prompt":"Question text","choices":["A","B"],"correctIndex":0}]}'
+  );
+  const [newTitle, setNewTitle] = useState('');
+  const [newYoutube, setNewYoutube] = useState('');
+
+  async function load() {
+    setLoading(true);
+    setError(null);
+    try {
+      const [mRes, tRes] = await Promise.all([
+        fetch(`/api/admin/training/modules/${id}`),
+        fetch('/api/admin/training/teams'),
+      ]);
+      const mData = await mRes.json();
+      const tData = await tRes.json();
+      if (!mRes.ok) throw new Error(mData.error || 'Failed to load module');
+      setTeams(tData.teams ?? []);
+      const mm = mData.module as ModuleDetail;
+      setMod(mm);
+      setName(mm.name);
+      setSlug(mm.slug);
+      setDescription(mm.description || '');
+      setIsCompanyWide(mm.isCompanyWide);
+      setTeamId(mm.teamId || '');
+      setModuleSortOrder(mm.moduleSortOrder ?? 0);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    setLoading(true);
-    fetch(`/api/admin/training/modules/${id}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (!data.module) {
-          setError('Module not found');
-          return;
-        }
-        setModule(data.module);
-        setName(data.module.name);
-        setSlug(data.module.slug);
-        setDescription(data.module.description || '');
-      })
-      .catch(() => setError('Failed to load module'))
-      .finally(() => setLoading(false));
+    void load();
   }, [id]);
 
-  async function handleSaveMeta(e: React.FormEvent) {
+  async function saveMeta(e: React.FormEvent) {
     e.preventDefault();
-    if (!module) return;
-    setSavingMeta(true);
     setError(null);
+    const res = await fetch(`/api/admin/training/modules/${id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name.trim(),
+        slug: slug.trim(),
+        description: description.trim() || null,
+        isCompanyWide,
+        teamId: isCompanyWide ? null : teamId,
+        moduleSortOrder,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error || 'Save failed');
+      return;
+    }
+    setMod(data.module);
+  }
+
+  async function addVideo(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    let quiz: unknown = null;
     try {
-      const res = await fetch(`/api/admin/training/modules/${id}`, {
+      quiz = JSON.parse(quizJson);
+    } catch {
+      setError('Quiz JSON invalid');
+      return;
+    }
+    const res = await fetch(`/api/admin/training/modules/${id}/sections`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'video',
+        title: newTitle.trim(),
+        youtubeUrl: newYoutube.trim(),
+        quiz,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error || 'Failed');
+      return;
+    }
+    setNewTitle('');
+    setNewYoutube('');
+    void load();
+  }
+
+  async function addPdf(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    let quiz: unknown = null;
+    try {
+      quiz = JSON.parse(quizJson);
+    } catch {
+      setError('Quiz JSON invalid');
+      return;
+    }
+    const res = await fetch(`/api/admin/training/modules/${id}/sections`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'pdf',
+        title: newTitle.trim(),
+        quiz,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error || 'Failed');
+      return;
+    }
+    const sid = data.section?.id as string;
+    setNewTitle('');
+    void load();
+    if (!sid) return;
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/pdf';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const fd = new FormData();
+      fd.set('file', file);
+      const up = await fetch(`/api/admin/training/modules/${id}/sections/${sid}/pdf`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, slug, description }),
+        body: fd,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to save module');
-      setModule(data.module);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save module');
-    } finally {
-      setSavingMeta(false);
-    }
+      const uData = await up.json();
+      if (!up.ok) setError(uData.error || 'PDF upload failed');
+      void load();
+    };
+    input.click();
   }
 
-  async function handleAddVideo() {
-    setAddingVideo(true);
-    setError(null);
-    try {
-      const title = prompt('Video title (for checklist):')?.trim();
-      if (!title) return;
-      const youtubeUrl = prompt('YouTube URL:')?.trim();
-      if (!youtubeUrl) return;
-      const res = await fetch(`/api/admin/training/modules/${id}/videos`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, youtubeUrl }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to add video');
-      setModule((prev) =>
-        prev ? { ...prev, videos: [...prev.videos, data.video] } : prev
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to add video');
-    } finally {
-      setAddingVideo(false);
-    }
-  }
-
-  async function handleUploadPdf(videoId: string, file: File) {
-    setUploadingPdfFor(videoId);
-    setError(null);
-    try {
-      const form = new FormData();
-      form.set('file', file);
-      const res = await fetch(
-        `/api/admin/training/modules/${id}/videos/${videoId}/pdf`,
-        {
-          method: 'POST',
-          body: form,
-        }
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to upload PDF');
-      setModule((prev) =>
-        prev
-          ? {
-              ...prev,
-              videos: prev.videos.map((v) =>
-                v.id === videoId ? { ...v, presentationPdfKey: data.video.presentationPdfKey } : v
-              ),
-            }
-          : prev
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to upload PDF');
-    } finally {
-      setUploadingPdfFor(null);
-    }
-  }
-
-  async function handleRemovePdf(videoId: string) {
-    setUploadingPdfFor(videoId);
-    setError(null);
-    try {
-      const res = await fetch(
-        `/api/admin/training/modules/${id}/videos/${videoId}/pdf`,
-        {
-          method: 'DELETE',
-        }
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to remove PDF');
-      setModule((prev) =>
-        prev
-          ? {
-              ...prev,
-              videos: prev.videos.map((v) =>
-                v.id === videoId ? { ...v, presentationPdfKey: null } : v
-              ),
-            }
-          : prev
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to remove PDF');
-    } finally {
-      setUploadingPdfFor(null);
-    }
+  async function moveSection(index: number, dir: -1 | 1) {
+    if (!mod) return;
+    const j = index + dir;
+    if (j < 0 || j >= mod.sections.length) return;
+    const next = [...mod.sections];
+    const t = next[index];
+    next[index] = next[j];
+    next[j] = t;
+    const ordered = next.map((s) => s.id);
+    const res = await fetch(`/api/admin/training/modules/${id}/sections/reorder`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderedSectionIds: ordered }),
+    });
+    const data = await res.json();
+    if (!res.ok) setError(data.error || 'Reorder failed');
+    void load();
   }
 
   if (loading) {
@@ -169,254 +200,191 @@ export default function AdminEditTrainingModulePage({ params }: PageProps) {
       </div>
     );
   }
-
-  if (error) {
+  if (error && !mod) {
     return (
       <div className="card">
         <p className="text-sm text-red-600">{error}</p>
       </div>
     );
   }
-
-  if (!module) {
+  if (!mod) {
     return (
       <div className="card">
-        <p className="text-sm text-gray-500">Module not found.</p>
+        <p className="text-sm text-gray-500">Not found</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
+      <Link href="/admin/training" className="text-sm text-teal-600 hover:text-teal-700">
+        ← Modules
+      </Link>
+      {error && (
+        <div className="card border-red-200 bg-red-50 text-sm text-red-800">{error}</div>
+      )}
+
       <div className="card">
-        <h1 className="mb-4 text-xl font-semibold">Edit training module</h1>
-        <form onSubmit={handleSaveMeta} className="space-y-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Position / module name
-            </label>
+        <h1 className="mb-4 text-xl font-semibold">Edit module</h1>
+        <form onSubmit={saveMeta} className="space-y-3">
+          <input className="input-field" value={name} onChange={(e) => setName(e.target.value)} />
+          <input className="input-field" value={slug} onChange={(e) => setSlug(e.target.value)} />
+          <textarea
+            className="input-field min-h-[72px]"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+          <label className="flex items-center gap-2 text-sm">
             <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="input-field"
-              required
+              type="checkbox"
+              checked={isCompanyWide}
+              onChange={(e) => setIsCompanyWide(e.target.checked)}
             />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Description (optional)
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="input-field min-h-[80px]"
-              placeholder="Short description of what this training covers."
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              URL slug
-            </label>
-            <input
-              type="text"
-              value={slug}
-              onChange={(e) => setSlug(e.target.value)}
-              className="input-field"
-              required
-            />
-            <p className="mt-1 text-xs text-gray-500">
-              Link: <span className="font-mono">/training/module/{slug}</span>
-            </p>
-          </div>
-          <button type="submit" className="btn-primary" disabled={savingMeta}>
-            {savingMeta ? 'Saving…' : 'Save module'}
+            Company-wide
+          </label>
+          {!isCompanyWide && (
+            <select className="input-field" value={teamId} onChange={(e) => setTeamId(e.target.value)}>
+              {teams.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          )}
+          <input
+            type="number"
+            className="input-field"
+            value={moduleSortOrder}
+            onChange={(e) => setModuleSortOrder(Number(e.target.value))}
+          />
+          <button type="submit" className="btn-primary">
+            Save module
           </button>
         </form>
+        <p className="mt-2 text-xs text-gray-500">
+          Trainee link: <span className="font-mono">/training/module/{slug}</span>
+        </p>
+      </div>
+
+      <div className="card space-y-3">
+        <h2 className="text-sm font-semibold">Add section (video or PDF)</h2>
+        <p className="text-xs text-gray-500">
+          Paste valid quiz JSON (multiple choice). PDF sections prompt for a file upload after
+          creation.
+        </p>
+        <textarea
+          className="input-field min-h-[100px] font-mono text-xs"
+          value={quizJson}
+          onChange={(e) => setQuizJson(e.target.value)}
+        />
+        <input
+          className="input-field"
+          placeholder="Section title"
+          value={newTitle}
+          onChange={(e) => setNewTitle(e.target.value)}
+        />
+        <input
+          className="input-field"
+          placeholder="YouTube URL (video only)"
+          value={newYoutube}
+          onChange={(e) => setNewYoutube(e.target.value)}
+        />
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn-secondary text-sm" onClick={addVideo}>
+            Add video section
+          </button>
+          <button type="button" className="btn-secondary text-sm" onClick={addPdf}>
+            Add PDF section
+          </button>
+        </div>
       </div>
 
       <div className="card">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-800">Videos</h2>
-          <button
-            type="button"
-            onClick={handleAddVideo}
-            className="btn-secondary text-sm"
-            disabled={addingVideo}
-          >
-            {addingVideo ? 'Adding…' : 'Add video'}
-          </button>
-        </div>
-        {module.videos.length === 0 ? (
-          <p className="text-sm text-gray-500">
-            No videos yet. Click &quot;Add video&quot; to add the first one.
-          </p>
-        ) : (
-          <ul className="space-y-3">
-            {module.videos.map((v, index) => (
-              <li
-                key={v.id}
-                className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm"
-              >
-                <p className="font-medium text-gray-900">
-                  {index + 1}. {v.title}
-                </p>
-                <p className="mt-1 text-xs text-gray-500 break-all">
-                  {v.youtubeUrl}
-                </p>
-                {typeof v.version === 'number' && (
-                  <p className="mt-1 text-xs text-gray-500">
-                    Version: {v.version}
-                  </p>
-                )}
-                <div className="mt-2 flex flex-wrap items-center gap-3">
-                  {v.presentationPdfKey ? (
-                    <span className="text-xs text-teal-700">
-                      PDF uploaded
-                    </span>
-                  ) : (
-                    <span className="text-xs text-gray-500">
-                      No presentation PDF uploaded yet.
-                    </span>
-                  )}
-                  <label className="text-xs text-teal-700 cursor-pointer hover:text-teal-800">
-                    {uploadingPdfFor === v.id ? 'Uploading…' : 'Upload / replace PDF'}
-                    <input
-                      type="file"
-                      accept="application/pdf,.pdf"
-                      className="sr-only"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          void handleUploadPdf(v.id, file);
-                        }
-                        e.target.value = '';
-                      }}
-                    />
-                  </label>
-                  {v.presentationPdfKey && (
-                    <button
-                      type="button"
-                      className="text-xs text-red-600 hover:text-red-700"
-                      disabled={uploadingPdfFor === v.id}
-                      onClick={() => void handleRemovePdf(v.id)}
-                    >
-                      Remove PDF
-                    </button>
-                  )}
+        <h2 className="mb-2 text-sm font-semibold">Sections</h2>
+        <ul className="space-y-2 text-sm">
+          {mod.sections.map((s, index) => (
+            <li key={s.id} className="rounded border border-gray-100 p-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  {index + 1}. {s.title}{' '}
+                  <span className="text-xs text-gray-500">
+                    ({s.kind}) v{s.contentVersion}
+                  </span>
+                </span>
+                <div className="flex gap-1">
                   <button
                     type="button"
-                    className="text-xs text-gray-600 hover:text-gray-800"
-                    onClick={async () => {
-                      setError(null);
-                      const newTitle = prompt('Edit video title:', v.title)?.trim();
-                      if (!newTitle) return;
-                      const newUrl = prompt('Edit YouTube URL:', v.youtubeUrl)?.trim();
-                      if (!newUrl) return;
-                      try {
-                        const res = await fetch(
-                          `/api/admin/training/modules/${id}/videos/${v.id}`,
-                          {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ title: newTitle, youtubeUrl: newUrl }),
-                          }
-                        );
-                        const data = await res.json();
-                        if (!res.ok) throw new Error(data.error || 'Failed to update video');
-                        setModule((prev) =>
-                          prev
-                            ? {
-                                ...prev,
-                                videos: prev.videos.map((vv) =>
-                                  vv.id === v.id
-                                    ? {
-                                        ...vv,
-                                        title: data.video.title,
-                                        youtubeUrl: data.video.youtubeUrl,
-                                      }
-                                    : vv
-                                ),
-                              }
-                            : prev
-                        );
-                      } catch (e) {
-                        setError(
-                          e instanceof Error ? e.message : 'Failed to update video'
-                        );
-                      }
-                    }}
+                    className="btn-secondary px-2 py-0.5 text-xs"
+                    disabled={index === 0}
+                    onClick={() => void moveSection(index, -1)}
                   >
-                    Edit
+                    Up
                   </button>
                   <button
                     type="button"
-                    className="text-xs text-red-600 hover:text-red-700"
+                    className="btn-secondary px-2 py-0.5 text-xs"
+                    disabled={index === mod.sections.length - 1}
+                    onClick={() => void moveSection(index, 1)}
+                  >
+                    Down
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary px-2 py-0.5 text-xs"
                     onClick={async () => {
-                      if (!confirm('Delete this video from the module?')) return;
-                      setError(null);
-                      try {
-                        const res = await fetch(
-                          `/api/admin/training/modules/${id}/videos/${v.id}`,
-                          { method: 'DELETE' }
-                        );
-                        const data = await res.json();
-                        if (!res.ok) throw new Error(data.error || 'Failed to delete video');
-                        setModule((prev) =>
-                          prev
-                            ? {
-                                ...prev,
-                                videos: prev.videos.filter((vv) => vv.id !== v.id),
-                              }
-                            : prev
-                        );
-                      } catch (e) {
-                        setError(
-                          e instanceof Error ? e.message : 'Failed to delete video'
-                        );
-                      }
+                      if (!confirm('Bump version? This clears learner progress for this section.'))
+                        return;
+                      await fetch(`/api/admin/training/modules/${id}/sections/${s.id}/bump`, {
+                        method: 'POST',
+                      });
+                      void load();
+                    }}
+                  >
+                    Bump version
+                  </button>
+                  <button
+                    type="button"
+                    className="text-xs text-red-600"
+                    onClick={async () => {
+                      if (!confirm('Delete section?')) return;
+                      await fetch(`/api/admin/training/modules/${id}/sections/${s.id}`, {
+                        method: 'DELETE',
+                      });
+                      void load();
                     }}
                   >
                     Delete
                   </button>
-                  <button
-                    type="button"
-                    className="text-xs text-gray-600 hover:text-gray-800"
-                    onClick={async () => {
-                      setError(null);
-                      try {
-                        const res = await fetch(
-                          `/api/admin/training/modules/${id}/videos/${v.id}/version`,
-                          { method: 'POST' }
-                        );
-                        const data = await res.json();
-                        if (!res.ok) throw new Error(data.error || 'Failed to bump version');
-                        setModule((prev) =>
-                          prev
-                            ? {
-                                ...prev,
-                                videos: prev.videos.map((vv) =>
-                                  vv.id === v.id ? { ...vv, version: data.video.version } : vv
-                                ),
-                              }
-                            : prev
-                        );
-                      } catch (e) {
-                        setError(
-                          e instanceof Error ? e.message : 'Failed to bump video version'
-                        );
-                      }
-                    }}
-                  >
-                    Require rewatch (new version)
-                  </button>
                 </div>
-              </li>
-            ))}
-          </ul>
-        )}
+              </div>
+              {s.kind === 'pdf' && (
+                <label className="mt-1 inline-block cursor-pointer text-xs text-teal-700">
+                  Upload / replace PDF
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    className="sr-only"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const fd = new FormData();
+                      fd.set('file', file);
+                      const res = await fetch(
+                        `/api/admin/training/modules/${id}/sections/${s.id}/pdf`,
+                        { method: 'POST', body: fd }
+                      );
+                      const data = await res.json();
+                      if (!res.ok) setError(data.error || 'Upload failed');
+                      void load();
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+              )}
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   );
 }
-

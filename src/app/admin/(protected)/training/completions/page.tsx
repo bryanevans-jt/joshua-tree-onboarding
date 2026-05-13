@@ -12,6 +12,7 @@ interface ModuleRow {
     userName: string;
     completedCount: number;
     totalVideos: number;
+    lastCompletedAt: string | null;
   }>;
 }
 
@@ -27,6 +28,47 @@ export default function TrainingCompletionsPage() {
       .catch(() => setError('Failed to load training completions'))
       .finally(() => setLoading(false));
   }, []);
+
+  function escapeCsvCell(value: string) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+
+  function downloadCsv() {
+    const header = [
+      'moduleName',
+      'moduleSlug',
+      'userName',
+      'userEmail',
+      'completedCount',
+      'totalVideos',
+      'lastCompletedAt',
+    ];
+    const lines = [header.join(',')];
+    for (const m of modules) {
+      for (const u of m.users) {
+        lines.push(
+          [
+            escapeCsvCell(m.name),
+            escapeCsvCell(m.slug),
+            escapeCsvCell(u.userName || ''),
+            escapeCsvCell(u.userEmail || ''),
+            escapeCsvCell(String(u.completedCount)),
+            escapeCsvCell(String(u.totalVideos)),
+            escapeCsvCell(u.lastCompletedAt || ''),
+          ].join(',')
+        );
+      }
+    }
+    const blob = new Blob([lines.join('\n')], {
+      type: 'text/csv;charset=utf-8;',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `training-completions-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   async function handleReset(moduleId: string, userId: string) {
     if (!confirm('Reset progress for this user in this module?')) return;
@@ -62,11 +104,22 @@ export default function TrainingCompletionsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="mb-1 text-xl font-semibold">Training completions</h1>
-        <p className="text-sm text-gray-600">
-          View who has started or completed each training module and reset progress if needed.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="mb-1 text-xl font-semibold">Training completions</h1>
+          <p className="text-sm text-gray-600">
+            View who has started or completed each training module and reset progress if needed.
+          </p>
+        </div>
+        {!loading && !error && modules.length > 0 && (
+          <button
+            type="button"
+            className="btn-secondary text-sm"
+            onClick={() => downloadCsv()}
+          >
+            Download CSV
+          </button>
+        )}
       </div>
 
       {loading && (
@@ -116,6 +169,9 @@ export default function TrainingCompletionsPage() {
                     <th className="px-2 py-2 text-left font-medium text-gray-700">
                       Progress
                     </th>
+                    <th className="px-2 py-2 text-left font-medium text-gray-700">
+                      Last activity
+                    </th>
                     <th className="px-2 py-2 text-right font-medium text-gray-700">
                       Actions
                     </th>
@@ -134,6 +190,11 @@ export default function TrainingCompletionsPage() {
                         {u.totalVideos === 0
                           ? '0 videos'
                           : `${u.completedCount} / ${u.totalVideos} completed`}
+                      </td>
+                      <td className="px-2 py-1.5 text-gray-600">
+                        {u.lastCompletedAt
+                          ? new Date(u.lastCompletedAt).toLocaleString()
+                          : '—'}
                       </td>
                       <td className="px-2 py-1.5 text-right">
                         <button

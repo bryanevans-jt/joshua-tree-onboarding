@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { isApprovedAdmin } from '@/lib/approved-admins';
-import { getSupabase } from '@/lib/supabase-server';
-import { listModules } from '@/lib/training-store';
+import { createModule, listModules } from '@/lib/training-store';
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -29,28 +28,35 @@ export async function POST(request: Request) {
   const name = (body.name as string | undefined)?.trim();
   const slug = (body.slug as string | undefined)?.trim();
   const description = (body.description as string | undefined)?.trim() || null;
+  const isCompanyWide = !!body.isCompanyWide;
+  const teamId = (body.teamId as string | undefined)?.trim() || null;
+  const moduleSortOrder =
+    body.moduleSortOrder !== undefined ? Math.floor(Number(body.moduleSortOrder)) : 0;
+
   if (!name || !slug) {
     return NextResponse.json({ error: 'Name and slug are required' }, { status: 400 });
   }
-
-  const supabase = getSupabase();
-  const { data, error } = await supabase
-    .from('training_modules')
-    .insert({
-      name,
-      slug,
-      description,
-      created_at: new Date().toISOString(),
-    })
-    .select()
-    .single();
-  if (error) {
+  if (!isCompanyWide && !teamId) {
     return NextResponse.json(
-      { error: error.message || 'Failed to create module' },
-      { status: 500 }
+      { error: 'Team module requires teamId, or mark as company-wide.' },
+      { status: 400 }
     );
   }
 
-  return NextResponse.json({ module: data });
+  try {
+    const module = await createModule({
+      name,
+      slug,
+      description,
+      isCompanyWide,
+      teamId: isCompanyWide ? null : teamId,
+      moduleSortOrder: Number.isNaN(moduleSortOrder) ? 0 : moduleSortOrder,
+    });
+    return NextResponse.json({ module });
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'Failed to create module' },
+      { status: 500 }
+    );
+  }
 }
-
