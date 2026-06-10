@@ -1,6 +1,6 @@
 /**
  * Temporary storage for onboarding uploads (completed PDFs, license, headshot).
- * Supabase Storage when configured, else filesystem. Deleted after submit + email delivery.
+ * Supabase Storage when configured, else filesystem. Removed by cron after ~30 days (see cleanupOldUploads).
  */
 
 import fs from 'fs';

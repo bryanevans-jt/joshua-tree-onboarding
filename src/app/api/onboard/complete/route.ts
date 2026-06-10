@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getLinkByToken, updateLink, getSettings, saveProgress } from '@/lib/store';
+import { getLinkByToken, updateLink, getSettings } from '@/lib/store';
 import { buildAttachmentsFromUploads, splitAttachmentsForDelivery } from '@/lib/build-attachments-from-uploads';
-import { deleteAllDocumentsForLink } from '@/lib/onboarding-upload-storage';
 import { sendEmail } from '@/lib/email';
 
 const REQUIRED_STEPS_GA = [
@@ -115,13 +114,6 @@ export async function POST(request: Request) {
       if (!result.sent && result.error) {
         console.error('[onboard/complete] Comms email failed:', result.error);
       }
-    }
-
-    try {
-      await deleteAllDocumentsForLink(link.id);
-      await saveProgress(token, { uploadedDocumentKeys: {} });
-    } catch (delErr) {
-      console.error('[onboard/complete] delete/clear after send failed:', delErr);
     }
 
     return NextResponse.json({ ok: true });

@@ -1,6 +1,6 @@
 /**
  * Build email attachments from uploaded documents (storage keys).
- * Used when new hire uploads completed PDFs; we pass them through and then delete.
+ * Used when new hire uploads completed PDFs; files remain in storage until cron cleanup (~30 days).
  */
 
 import { downloadDocument } from './onboarding-upload-storage';
