@@ -77,6 +77,11 @@ export async function createLink(state: State, position: Position): Promise<Onbo
   return Promise.resolve(createLinkFile(state, position));
 }
 
+export async function getLinkById(id: string): Promise<OnboardingLink | undefined> {
+  if (hasSupabase()) return supabaseStore.getLinkById(id);
+  return Promise.resolve(Array.from(links.values()).find((l) => l.id === id));
+}
+
 export async function getLinkByToken(token: string): Promise<OnboardingLink | undefined> {
   if (hasSupabase()) return supabaseStore.getLinkByToken(token);
   return Promise.resolve(links.get(token));

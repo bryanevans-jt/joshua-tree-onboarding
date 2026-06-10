@@ -122,6 +122,11 @@ export async function downloadDocument(linkId: string, key: string): Promise<Buf
   return downloadFile(linkId, key);
 }
 
+export async function listDocumentKeysForLink(linkId: string): Promise<string[]> {
+  if (hasSupabase()) return listKeysSupabase(linkId);
+  return listKeysFile(linkId);
+}
+
 export async function deleteAllDocumentsForLink(linkId: string): Promise<void> {
   if (hasSupabase()) return deleteAllSupabase(linkId);
   return deleteAllFile(linkId);

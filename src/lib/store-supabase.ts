@@ -48,6 +48,17 @@ export async function createLink(state: State, position: Position): Promise<Onbo
   return rowToLink(data);
 }
 
+export async function getLinkById(id: string): Promise<OnboardingLink | undefined> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('onboarding_links')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? rowToLink(data) : undefined;
+}
+
 export async function getLinkByToken(token: string): Promise<OnboardingLink | undefined> {
   const supabase = getSupabase();
   const { data, error } = await supabase
