@@ -49,6 +49,7 @@ function rowSection(r: any): TrainingSection {
     contentVersion: r.content_version ?? 1,
     summary: r.summary ?? null,
     estimatedMinutes: r.estimated_minutes ?? null,
+    isOptional: !!r.is_optional,
     createdAt: r.created_at,
     updatedAt: r.updated_at ?? null,
   };
@@ -374,6 +375,7 @@ export async function createSection(input: {
   quiz?: TrainingQuiz | null;
   summary?: string | null;
   estimatedMinutes?: number | null;
+  isOptional?: boolean;
 }): Promise<TrainingSection> {
   const supabase = getSupabase();
   const { data, error } = await supabase
@@ -390,6 +392,7 @@ export async function createSection(input: {
       summary: input.summary?.trim() || null,
       estimated_minutes:
         input.estimatedMinutes != null ? Math.max(0, Math.floor(input.estimatedMinutes)) : null,
+      is_optional: !!input.isOptional,
       created_at: new Date().toISOString(),
     })
     .select()
@@ -407,6 +410,7 @@ export async function updateSection(
     quiz?: TrainingQuiz | null;
     summary?: string | null;
     estimatedMinutes?: number | null;
+    isOptional?: boolean;
   }
 ): Promise<TrainingSection> {
   const supabase = getSupabase();
@@ -416,18 +420,22 @@ export async function updateSection(
     .eq('id', sectionId)
     .single();
   const kind = existing?.kind as 'video' | 'pdf';
+  const patch: Record<string, unknown> = {
+    title: input.title.trim(),
+    youtube_url: kind === 'video' ? input.youtubeUrl?.trim() || null : null,
+    pdf_key: kind === 'pdf' ? input.pdfKey ?? null : null,
+    quiz_json: input.quiz && input.quiz.questions.length ? input.quiz : null,
+    summary: input.summary?.trim() || null,
+    estimated_minutes:
+      input.estimatedMinutes != null ? Math.max(0, Math.floor(input.estimatedMinutes)) : null,
+    updated_at: new Date().toISOString(),
+  };
+  if (input.isOptional !== undefined) {
+    patch.is_optional = input.isOptional;
+  }
   const { data, error } = await supabase
     .from('training_sections')
-    .update({
-      title: input.title.trim(),
-      youtube_url: kind === 'video' ? input.youtubeUrl?.trim() || null : null,
-      pdf_key: kind === 'pdf' ? input.pdfKey ?? null : null,
-      quiz_json: input.quiz && input.quiz.questions.length ? input.quiz : null,
-      summary: input.summary?.trim() || null,
-      estimated_minutes:
-        input.estimatedMinutes != null ? Math.max(0, Math.floor(input.estimatedMinutes)) : null,
-      updated_at: new Date().toISOString(),
-    })
+    .update(patch)
     .eq('id', sectionId)
     .select()
     .single();
@@ -491,6 +499,7 @@ export function serializeSectionLearner(s: TrainingSection) {
     summary: s.summary ?? null,
     estimatedMinutes: s.estimatedMinutes ?? null,
     contentVersion: s.contentVersion,
+    isOptional: s.isOptional,
     quiz: s.quiz
       ? {
           questions: s.quiz.questions.map((q) => ({
@@ -517,6 +526,7 @@ export function serializeSection(s: TrainingSection) {
     contentVersion: s.contentVersion,
     summary: s.summary ?? null,
     estimatedMinutes: s.estimatedMinutes ?? null,
+    isOptional: s.isOptional,
   };
 }
 

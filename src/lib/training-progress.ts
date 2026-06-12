@@ -43,6 +43,19 @@ export async function getSectionProgress(
   return data ? rowProg(data) : null;
 }
 
+export function isSectionRequired(section: TrainingSection): boolean {
+  return !section.isOptional;
+}
+
+/** Required sections must be satisfied; optional sections never block completion. */
+export function isRequiredSectionComplete(
+  section: TrainingSection,
+  p: SectionProgressRow | null
+): boolean {
+  if (section.isOptional) return true;
+  return isSectionSatisfied(section, p);
+}
+
 export function isSectionSatisfied(section: TrainingSection, p: SectionProgressRow | null): boolean {
   if (!p || p.contentVersion !== section.contentVersion) return false;
   const hasQuiz = !!(section.quiz && section.quiz.questions.length);
@@ -63,6 +76,7 @@ export async function isCompanyWideProgramComplete(userId: string): Promise<bool
   for (const m of modules) {
     const sections = await listSectionsForModule(m.id);
     for (const s of sections) {
+      if (!isSectionRequired(s)) continue;
       const p = await getSectionProgress(userId, s.id);
       if (!isSectionSatisfied(s, p)) return false;
     }
@@ -85,6 +99,7 @@ export async function isTeamModuleCompleteForUser(
       const sections = await listSectionsForModule(tm.id);
       if (sections.length === 0) continue;
       for (const s of sections) {
+        if (!isSectionRequired(s)) continue;
         const p = await getSectionProgress(userId, s.id);
         if (!isSectionSatisfied(s, p)) return false;
       }
@@ -111,8 +126,9 @@ export async function getTraineeAggregateProgress(
   const cw = await listCompanyWideModules();
   for (const m of cw) {
     const sections = await listSectionsForModule(m.id);
-    companyTotal += sections.length;
-    for (const s of sections) {
+    const required = sections.filter(isSectionRequired);
+    companyTotal += required.length;
+    for (const s of required) {
       const p = await getSectionProgress(userId, s.id);
       if (isSectionSatisfied(s, p)) companyDone++;
     }
@@ -128,8 +144,9 @@ export async function getTraineeAggregateProgress(
         if (seenMod.has(tm.id)) continue;
         seenMod.add(tm.id);
         const sections = await listSectionsForModule(tm.id);
-        teamTotal += sections.length;
-        for (const s of sections) {
+        const required = sections.filter(isSectionRequired);
+        teamTotal += required.length;
+        for (const s of required) {
           const p = await getSectionProgress(userId, s.id);
           if (isSectionSatisfied(s, p)) teamDone++;
         }

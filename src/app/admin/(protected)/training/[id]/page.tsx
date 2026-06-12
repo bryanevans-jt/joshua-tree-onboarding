@@ -3,6 +3,9 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { TrainingSectionFields } from '@/components/admin/training/TrainingSectionFields';
+import type { TrainingQuiz } from '@/lib/training-quiz';
+import { parseQuizJson, validateQuizDraft } from '@/lib/training-quiz';
 
 interface SectionRow {
   id: string;
@@ -11,8 +14,11 @@ interface SectionRow {
   orderIndex: number;
   youtubeUrl?: string | null;
   pdfKey?: string | null;
-  quiz: unknown;
+  quiz: TrainingQuiz | null;
   contentVersion: number;
+  summary?: string | null;
+  estimatedMinutes?: number | null;
+  isOptional: boolean;
 }
 
 interface ModuleDetail {
@@ -24,6 +30,28 @@ interface ModuleDetail {
   teamId: string | null;
   moduleSortOrder: number;
   sections: SectionRow[];
+}
+
+function emptySectionForm() {
+  return {
+    title: '',
+    youtubeUrl: '',
+    summary: '',
+    estimatedMinutes: '',
+    isOptional: false,
+    quiz: null as TrainingQuiz | null,
+  };
+}
+
+function sectionToForm(s: SectionRow) {
+  return {
+    title: s.title,
+    youtubeUrl: s.youtubeUrl || '',
+    summary: s.summary || '',
+    estimatedMinutes: s.estimatedMinutes != null ? String(s.estimatedMinutes) : '',
+    isOptional: s.isOptional,
+    quiz: s.quiz ? { questions: s.quiz.questions.map((q) => ({ ...q, choices: [...q.choices] })) } : null,
+  };
 }
 
 export default function AdminEditTrainingModulePage({ params }: { params: { id: string } }) {
@@ -39,11 +67,11 @@ export default function AdminEditTrainingModulePage({ params }: { params: { id: 
   const [isCompanyWide, setIsCompanyWide] = useState(true);
   const [teamId, setTeamId] = useState('');
   const [moduleSortOrder, setModuleSortOrder] = useState(0);
-  const [quizJson, setQuizJson] = useState(
-    '{"questions":[{"id":"q1","prompt":"Question text","choices":["A","B"],"correctIndex":0}]}'
-  );
-  const [newTitle, setNewTitle] = useState('');
-  const [newYoutube, setNewYoutube] = useState('');
+  const [addKind, setAddKind] = useState<'video' | 'pdf'>('video');
+  const [addForm, setAddForm] = useState(emptySectionForm);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState(emptySectionForm);
+  const [savingEdit, setSavingEdit] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const activeTeams = teams.filter((t) => t.active !== false);
@@ -53,7 +81,7 @@ export default function AdminEditTrainingModulePage({ params }: { params: { id: 
     setError(null);
     try {
       const [mRes, tRes] = await Promise.all([
-        fetch(`/api/admin/training/modules/${id}`),
+        fetch(`/api/admin/training/modules/${id}`, { cache: 'no-store' }),
         fetch('/api/admin/training/teams'),
       ]);
       const mData = await mRes.json();
@@ -102,81 +130,88 @@ export default function AdminEditTrainingModulePage({ params }: { params: { id: 
     setMod(data.module);
   }
 
-  async function addVideo(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    let quiz: unknown = null;
-    try {
-      quiz = JSON.parse(quizJson);
-    } catch {
-      setError('Quiz JSON invalid');
-      return;
-    }
-    const res = await fetch(`/api/admin/training/modules/${id}/sections`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        kind: 'video',
-        title: newTitle.trim(),
-        youtubeUrl: newYoutube.trim(),
-        quiz,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error || 'Failed');
-      return;
-    }
-    setNewTitle('');
-    setNewYoutube('');
-    void load();
+  function buildSectionPayload(form: ReturnType<typeof emptySectionForm>) {
+    const quizErr = validateQuizDraft(form.quiz);
+    if (quizErr) throw new Error(quizErr);
+    const quiz = form.quiz ? parseQuizJson(form.quiz) : null;
+    const est = form.estimatedMinutes.trim();
+    return {
+      title: form.title.trim(),
+      youtubeUrl: form.youtubeUrl.trim() || null,
+      summary: form.summary.trim() || null,
+      estimatedMinutes: est ? Math.max(0, Math.floor(Number(est))) : null,
+      isOptional: form.isOptional,
+      quiz,
+    };
   }
 
-  async function addPdf(e: React.FormEvent) {
-    e.preventDefault();
+  async function addSection() {
     setError(null);
-    let quiz: unknown = null;
+    if (!addForm.title.trim()) {
+      setError('Section title is required');
+      return;
+    }
     try {
-      quiz = JSON.parse(quizJson);
-    } catch {
-      setError('Quiz JSON invalid');
-      return;
-    }
-    const res = await fetch(`/api/admin/training/modules/${id}/sections`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        kind: 'pdf',
-        title: newTitle.trim(),
-        quiz,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error || 'Failed');
-      return;
-    }
-    const sid = data.section?.id as string;
-    setNewTitle('');
-    void load();
-    if (!sid) return;
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'application/pdf';
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      const fd = new FormData();
-      fd.set('file', file);
-      const up = await fetch(`/api/admin/training/modules/${id}/sections/${sid}/pdf`, {
+      const payload = buildSectionPayload(addForm);
+      const res = await fetch(`/api/admin/training/modules/${id}/sections`, {
         method: 'POST',
-        body: fd,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: addKind, ...payload }),
       });
-      const uData = await up.json();
-      if (!up.ok) setError(uData.error || 'PDF upload failed');
-      void load();
-    };
-    input.click();
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to add section');
+      const sid = data.section?.id as string | undefined;
+      setAddForm(emptySectionForm());
+      await load();
+      if (addKind === 'pdf' && sid) {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'application/pdf';
+        input.onchange = async () => {
+          const file = input.files?.[0];
+          if (!file) return;
+          const fd = new FormData();
+          fd.set('file', file);
+          const up = await fetch(`/api/admin/training/modules/${id}/sections/${sid}/pdf`, {
+            method: 'POST',
+            body: fd,
+          });
+          const uData = await up.json();
+          if (!up.ok) setError(uData.error || 'PDF upload failed');
+          void load();
+        };
+        input.click();
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to add section');
+    }
+  }
+
+  function startEdit(s: SectionRow) {
+    setEditingId(s.id);
+    setEditForm(sectionToForm(s));
+    setError(null);
+  }
+
+  async function saveEdit(sectionId: string) {
+    setError(null);
+    setSavingEdit(true);
+    try {
+      const payload = buildSectionPayload(editForm);
+      const res = await fetch(`/api/admin/training/modules/${id}/sections/${sectionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed');
+      setEditingId(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setSavingEdit(false);
+    }
   }
 
   async function moveSection(index: number, dir: -1 | 1) {
@@ -227,8 +262,9 @@ export default function AdminEditTrainingModulePage({ params }: { params: { id: 
           ← Training hub
         </Link>
         <p className="mt-2 max-w-3xl text-sm text-gray-600">
-          Sections are ordered steps (video or PDF). Optional quizzes gate completion. <strong>Bump version</strong>{' '}
-          resets learner progress for that section when you replace material.
+          Edit sections in place — changes keep the same section ID and trainee links. Use{' '}
+          <strong>Bump version</strong> only when you replace material and need learners to redo a
+          section.
         </p>
       </div>
       {error && (
@@ -238,7 +274,7 @@ export default function AdminEditTrainingModulePage({ params }: { params: { id: 
       <div className="card border-teal-100 shadow-md">
         <h1 className="mb-1 text-xl font-semibold text-gray-900">Edit module</h1>
         <p className="mb-4 text-xs text-gray-500">
-          Company-wide modules unlock first for everyone. Team modules only appear for people on that team (or teams).
+          Trainee link: <span className="font-mono">/training/module/{slug}</span>
         </p>
         <form onSubmit={saveMeta} className="space-y-3">
           <input className="input-field" value={name} onChange={(e) => setName(e.target.value)} />
@@ -268,7 +304,7 @@ export default function AdminEditTrainingModulePage({ params }: { params: { id: 
           <input
             type="number"
             className="input-field"
-            title="Sort order (lower appears first in admin lists)"
+            title="Sort order"
             value={moduleSortOrder}
             onChange={(e) => setModuleSortOrder(Number(e.target.value))}
           />
@@ -276,125 +312,180 @@ export default function AdminEditTrainingModulePage({ params }: { params: { id: 
             Save module
           </button>
         </form>
-        <p className="mt-2 text-xs text-gray-500">
-          Trainee link: <span className="font-mono">/training/module/{slug}</span>
-        </p>
       </div>
 
-      <div className="card space-y-3">
-        <h2 className="text-sm font-semibold">Add section (video or PDF)</h2>
-        <p className="text-xs text-gray-500">
-          Paste valid quiz JSON (multiple choice). PDF sections prompt for a file upload after
-          creation.
-        </p>
-        <textarea
-          className="input-field min-h-[100px] font-mono text-xs"
-          value={quizJson}
-          onChange={(e) => setQuizJson(e.target.value)}
-        />
-        <input
-          className="input-field"
-          placeholder="Section title"
-          value={newTitle}
-          onChange={(e) => setNewTitle(e.target.value)}
-        />
-        <input
-          className="input-field"
-          placeholder="YouTube URL (video only)"
-          value={newYoutube}
-          onChange={(e) => setNewYoutube(e.target.value)}
-        />
-        <div className="flex flex-wrap gap-2">
-          <button type="button" className="btn-secondary text-sm" onClick={addVideo}>
-            Add video section
+      <div className="card space-y-4">
+        <h2 className="text-sm font-semibold">Add section</h2>
+        <div className="flex gap-2 text-sm">
+          <button
+            type="button"
+            className={`rounded-md px-3 py-1 ${addKind === 'video' ? 'bg-teal-600 text-white' : 'bg-gray-100'}`}
+            onClick={() => setAddKind('video')}
+          >
+            Video
           </button>
-          <button type="button" className="btn-secondary text-sm" onClick={addPdf}>
-            Add PDF section
+          <button
+            type="button"
+            className={`rounded-md px-3 py-1 ${addKind === 'pdf' ? 'bg-teal-600 text-white' : 'bg-gray-100'}`}
+            onClick={() => setAddKind('pdf')}
+          >
+            PDF
           </button>
         </div>
+        <TrainingSectionFields
+          kind={addKind}
+          title={addForm.title}
+          onTitleChange={(v) => setAddForm((f) => ({ ...f, title: v }))}
+          youtubeUrl={addForm.youtubeUrl}
+          onYoutubeUrlChange={(v) => setAddForm((f) => ({ ...f, youtubeUrl: v }))}
+          summary={addForm.summary}
+          onSummaryChange={(v) => setAddForm((f) => ({ ...f, summary: v }))}
+          estimatedMinutes={addForm.estimatedMinutes}
+          onEstimatedMinutesChange={(v) => setAddForm((f) => ({ ...f, estimatedMinutes: v }))}
+          isOptional={addForm.isOptional}
+          onIsOptionalChange={(v) => setAddForm((f) => ({ ...f, isOptional: v }))}
+          quiz={addForm.quiz}
+          onQuizChange={(q) => setAddForm((f) => ({ ...f, quiz: q }))}
+        />
+        <button type="button" className="btn-primary text-sm" onClick={() => void addSection()}>
+          Add {addKind === 'video' ? 'video' : 'PDF'} section
+        </button>
       </div>
 
       <div className="card">
         <h2 className="mb-2 text-sm font-semibold">Sections</h2>
-        <ul className="space-y-2 text-sm">
+        <ul className="space-y-3 text-sm">
           {mod.sections.map((s, index) => (
-            <li key={s.id} className="rounded border border-gray-100 p-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span>
-                  {index + 1}. {s.title}{' '}
-                  <span className="text-xs text-gray-500">
-                    ({s.kind}) v{s.contentVersion}
-                  </span>
-                </span>
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    className="btn-secondary px-2 py-0.5 text-xs"
-                    disabled={index === 0}
-                    onClick={() => void moveSection(index, -1)}
-                  >
-                    Up
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-secondary px-2 py-0.5 text-xs"
-                    disabled={index === mod.sections.length - 1}
-                    onClick={() => void moveSection(index, 1)}
-                  >
-                    Down
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-secondary px-2 py-0.5 text-xs"
-                    onClick={async () => {
-                      if (!confirm('Bump version? This clears learner progress for this section.'))
-                        return;
-                      await fetch(`/api/admin/training/modules/${id}/sections/${s.id}/bump`, {
-                        method: 'POST',
-                      });
-                      void load();
-                    }}
-                  >
-                    Bump version
-                  </button>
-                  <button
-                    type="button"
-                    className="text-xs text-red-600"
-                    onClick={async () => {
-                      if (!confirm('Delete section?')) return;
-                      await fetch(`/api/admin/training/modules/${id}/sections/${s.id}`, {
-                        method: 'DELETE',
-                      });
-                      void load();
-                    }}
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-              {s.kind === 'pdf' && (
-                <label className="mt-1 inline-block cursor-pointer text-xs text-teal-700">
-                  Upload / replace PDF
-                  <input
-                    type="file"
-                    accept="application/pdf"
-                    className="sr-only"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      const fd = new FormData();
-                      fd.set('file', file);
-                      const res = await fetch(
-                        `/api/admin/training/modules/${id}/sections/${s.id}/pdf`,
-                        { method: 'POST', body: fd }
-                      );
-                      const data = await res.json();
-                      if (!res.ok) setError(data.error || 'Upload failed');
-                      void load();
-                      e.target.value = '';
-                    }}
+            <li key={s.id} className="rounded border border-gray-100 p-3">
+              {editingId === s.id ? (
+                <div className="space-y-3">
+                  <p className="text-xs font-medium text-gray-500">
+                    Editing: {s.kind} · v{s.contentVersion}
+                  </p>
+                  <TrainingSectionFields
+                    kind={s.kind}
+                    title={editForm.title}
+                    onTitleChange={(v) => setEditForm((f) => ({ ...f, title: v }))}
+                    youtubeUrl={editForm.youtubeUrl}
+                    onYoutubeUrlChange={(v) => setEditForm((f) => ({ ...f, youtubeUrl: v }))}
+                    summary={editForm.summary}
+                    onSummaryChange={(v) => setEditForm((f) => ({ ...f, summary: v }))}
+                    estimatedMinutes={editForm.estimatedMinutes}
+                    onEstimatedMinutesChange={(v) => setEditForm((f) => ({ ...f, estimatedMinutes: v }))}
+                    isOptional={editForm.isOptional}
+                    onIsOptionalChange={(v) => setEditForm((f) => ({ ...f, isOptional: v }))}
+                    quiz={editForm.quiz}
+                    onQuizChange={(q) => setEditForm((f) => ({ ...f, quiz: q }))}
+                    disabled={savingEdit}
                   />
-                </label>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="btn-primary text-sm"
+                      disabled={savingEdit}
+                      onClick={() => void saveEdit(s.id)}
+                    >
+                      {savingEdit ? 'Saving…' : 'Save section'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary text-sm"
+                      disabled={savingEdit}
+                      onClick={() => setEditingId(null)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span>
+                      {index + 1}. {s.title}{' '}
+                      <span className="text-xs text-gray-500">
+                        ({s.kind}
+                        {s.isOptional ? ', optional' : ''}) v{s.contentVersion}
+                        {s.quiz?.questions.length ? ` · ${s.quiz.questions.length} quiz Q` : ''}
+                      </span>
+                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      <button
+                        type="button"
+                        className="btn-secondary px-2 py-0.5 text-xs"
+                        onClick={() => startEdit(s)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary px-2 py-0.5 text-xs"
+                        disabled={index === 0}
+                        onClick={() => void moveSection(index, -1)}
+                      >
+                        Up
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary px-2 py-0.5 text-xs"
+                        disabled={index === mod.sections.length - 1}
+                        onClick={() => void moveSection(index, 1)}
+                      >
+                        Down
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary px-2 py-0.5 text-xs"
+                        onClick={async () => {
+                          if (!confirm('Bump version? This clears learner progress for this section.'))
+                            return;
+                          await fetch(`/api/admin/training/modules/${id}/sections/${s.id}/bump`, {
+                            method: 'POST',
+                          });
+                          void load();
+                        }}
+                      >
+                        Bump version
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs text-red-600"
+                        onClick={async () => {
+                          if (!confirm('Delete section?')) return;
+                          await fetch(`/api/admin/training/modules/${id}/sections/${s.id}`, {
+                            method: 'DELETE',
+                          });
+                          void load();
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                  {s.kind === 'pdf' && (
+                    <label className="mt-2 inline-block cursor-pointer text-xs text-teal-700">
+                      Upload / replace PDF
+                      <input
+                        type="file"
+                        accept="application/pdf"
+                        className="sr-only"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const fd = new FormData();
+                          fd.set('file', file);
+                          const res = await fetch(
+                            `/api/admin/training/modules/${id}/sections/${s.id}/pdf`,
+                            { method: 'POST', body: fd }
+                          );
+                          const data = await res.json();
+                          if (!res.ok) setError(data.error || 'Upload failed');
+                          void load();
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                  )}
+                </>
               )}
             </li>
           ))}
@@ -404,7 +495,7 @@ export default function AdminEditTrainingModulePage({ params }: { params: { id: 
       <div className="card border-red-200 bg-red-50/40 shadow-sm">
         <h2 className="text-sm font-semibold text-red-900">Danger zone</h2>
         <p className="mt-1 text-xs text-red-800/90">
-          Delete this entire module, all sections, and related learner progress. This cannot be undone.
+          Delete this entire module, all sections, and related learner progress.
         </p>
         <button
           type="button"

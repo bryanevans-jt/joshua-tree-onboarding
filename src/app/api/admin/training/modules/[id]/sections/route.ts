@@ -55,6 +55,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         body.estimatedMinutes !== undefined && body.estimatedMinutes !== null
           ? Math.max(0, Math.floor(Number(body.estimatedMinutes)))
           : null,
+      isOptional: !!body.isOptional,
     });
     return NextResponse.json({ section: serializeSectionAdmin(section) });
   } catch (e) {

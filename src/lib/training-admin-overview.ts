@@ -1,5 +1,9 @@
 import { getSupabase } from './supabase-server';
-import { isSectionSatisfied, type SectionProgressRow } from './training-progress';
+import {
+  isSectionRequired,
+  isSectionSatisfied,
+  type SectionProgressRow,
+} from './training-progress';
 import {
   adminListAllTeams,
   listCompanyWideModules,
@@ -107,6 +111,7 @@ export async function buildAdminTrainingOverview(): Promise<{
     for (const m of companyMods) {
       const sections = await sectionsOf(m.id);
       for (const s of sections) {
+        if (!isSectionRequired(s)) continue;
         companyTotal++;
         const p = pmap.get(s.id) ?? null;
         if (isSectionSatisfied(s, p)) companyDone++;
@@ -120,6 +125,7 @@ export async function buildAdminTrainingOverview(): Promise<{
         seenMod.add(tm.id);
         const sections = await sectionsOf(tm.id);
         for (const s of sections) {
+          if (!isSectionRequired(s)) continue;
           teamTotal++;
           const p = pmap.get(s.id) ?? null;
           if (isSectionSatisfied(s, p)) teamDone++;

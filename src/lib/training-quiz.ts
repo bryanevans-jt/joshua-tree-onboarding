@@ -9,6 +9,19 @@ export interface TrainingQuiz {
   questions: TrainingQuizQuestion[];
 }
 
+export function createEmptyQuestion(index: number): TrainingQuizQuestion {
+  return {
+    id: `q${index + 1}`,
+    prompt: '',
+    choices: ['', ''],
+    correctIndex: 0,
+  };
+}
+
+export function createEmptyQuiz(): TrainingQuiz {
+  return { questions: [] };
+}
+
 export function parseQuizJson(raw: unknown): TrainingQuiz | null {
   if (!raw || typeof raw !== 'object') return null;
   const q = (raw as { questions?: unknown }).questions;
@@ -31,6 +44,16 @@ export function parseQuizJson(raw: unknown): TrainingQuiz | null {
     questions.push({ id, prompt, choices, correctIndex: ci });
   }
   return questions.length ? { questions } : null;
+}
+
+/** Client-side validation before save; returns error message or null if ok. */
+export function validateQuizDraft(quiz: TrainingQuiz | null): string | null {
+  if (!quiz || quiz.questions.length === 0) return null;
+  const parsed = parseQuizJson(quiz);
+  if (!parsed) {
+    return 'Each quiz question needs a prompt, at least two answer choices, and a correct answer selected.';
+  }
+  return null;
 }
 
 /** answers: questionId -> selected choice index */

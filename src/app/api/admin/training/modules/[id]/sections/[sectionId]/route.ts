@@ -38,7 +38,20 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       : null;
   const pdfKey =
     existing.kind === 'pdf' ? (body.pdfKey as string | undefined) ?? existing.pdfKey : null;
-  const quiz = body.quiz !== undefined ? parseQuizJson(body.quiz) : existing.quiz;
+  let quiz = existing.quiz;
+  if (body.quiz !== undefined) {
+    const parsed = parseQuizJson(body.quiz);
+    if (
+      body.quiz &&
+      typeof body.quiz === 'object' &&
+      Array.isArray((body.quiz as { questions?: unknown }).questions) &&
+      (body.quiz as { questions: unknown[] }).questions.length > 0 &&
+      !parsed
+    ) {
+      return NextResponse.json({ error: 'Invalid quiz: check prompts, choices, and correct answers.' }, { status: 400 });
+    }
+    quiz = parsed;
+  }
 
   try {
     const section = await updateSection(params.sectionId, {
@@ -51,6 +64,8 @@ export async function PATCH(request: Request, { params }: RouteParams) {
         body.estimatedMinutes !== undefined && body.estimatedMinutes !== null
           ? Math.max(0, Math.floor(Number(body.estimatedMinutes)))
           : null,
+      isOptional:
+        body.isOptional !== undefined ? Boolean(body.isOptional) : existing.isOptional,
     });
     return NextResponse.json({ section: serializeSectionAdmin(section) });
   } catch (e) {

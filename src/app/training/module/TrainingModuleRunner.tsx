@@ -36,6 +36,7 @@ export interface TrainingModuleRunnerProps {
       summary?: string | null;
       estimatedMinutes?: number | null;
       contentVersion: number;
+      isOptional: boolean;
       quiz: LearnerQuiz;
     }>;
     progress: Array<{
@@ -58,8 +59,8 @@ export function TrainingModuleRunner({ initial }: TrainingModuleRunnerProps) {
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [quizMessage, setQuizMessage] = useState<string | null>(null);
   const [player, setPlayer] = useState<import('react-youtube').YouTubePlayer | null>(null);
-  const [watched, setWatched] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const playerRef = useRef<import('react-youtube').YouTubePlayer | null>(null);
+  const maxPositionRef = useRef(0);
   const markingRef = useRef(false);
 
   const lockedInteraction =
@@ -83,30 +84,44 @@ export function TrainingModuleRunner({ initial }: TrainingModuleRunnerProps) {
     if (data.progress) setProgress(data.progress);
   }
 
+  const videoAlreadyMarked = useMemo(() => {
+    if (!selected || selected.kind !== 'video') return false;
+    const pv = progMap.get(selected.id);
+    return !!(pv?.videoCompletedAt && pv.contentVersion === selected.contentVersion);
+  }, [selected, progMap]);
+
   useEffect(() => {
-    if (!player || !selected || selected.kind !== 'video') return;
-    let last = 0;
-    const id = window.setInterval(async () => {
-      if (document.visibilityState !== 'visible') return;
+    if (!player || !selected || selected.kind !== 'video' || lockedInteraction || videoAlreadyMarked) {
+      return;
+    }
+    playerRef.current = player;
+
+    async function checkProgress() {
+      const p = playerRef.current;
+      if (!p) return;
       try {
-        const t = await player.getCurrentTime();
-        const d = await player.getDuration();
-        if (!Number.isNaN(d) && d > 0) setDuration(d);
-        if (!Number.isNaN(t) && t >= last) {
-          setWatched((w) => w + (t - last));
-          last = t;
-        } else last = t;
+        const t = await p.getCurrentTime();
+        const d = await p.getDuration();
+        if (Number.isNaN(t) || Number.isNaN(d) || d <= 0) return;
+        if (t > maxPositionRef.current) maxPositionRef.current = t;
+        if (maxPositionRef.current / d >= 0.9) {
+          void markVideo();
+        }
       } catch {
         // ignore
       }
-    }, 1000);
+    }
+
+    const id = window.setInterval(() => {
+      void checkProgress();
+    }, 15000);
     return () => clearInterval(id);
-  }, [player, selected?.id, selected?.kind]);
+  }, [player, selected?.id, selected?.kind, lockedInteraction, videoAlreadyMarked]);
 
   useEffect(() => {
+    playerRef.current = null;
     setPlayer(null);
-    setWatched(0);
-    setDuration(0);
+    maxPositionRef.current = 0;
     setQuizMessage(null);
     setAnswers({});
   }, [selected?.id]);
@@ -114,7 +129,7 @@ export function TrainingModuleRunner({ initial }: TrainingModuleRunnerProps) {
   const isSatisfied = (sid: string) => progress.find((p) => p.sectionId === sid)?.satisfied;
 
   async function markVideo() {
-    if (!selected || selected.kind !== 'video' || lockedInteraction) return;
+    if (!selected || selected.kind !== 'video' || lockedInteraction || videoAlreadyMarked) return;
     if (markingRef.current) return;
     markingRef.current = true;
     try {
@@ -134,13 +149,26 @@ export function TrainingModuleRunner({ initial }: TrainingModuleRunnerProps) {
     }
   }
 
-  function onStateChange() {
-    if (!selected || selected.kind !== 'video' || lockedInteraction) return;
-    const pv = progMap.get(selected.id);
-    if (pv?.videoCompletedAt && pv.contentVersion === selected.contentVersion) return;
-    if (duration > 0 && watched / duration >= 0.9) {
+  function onStateChange(e: YouTubeEvent) {
+    if (!selected || selected.kind !== 'video' || lockedInteraction || videoAlreadyMarked) return;
+    // 0 = ended — treat a full watch as complete even if polling missed the last second.
+    if (e.data === 0) {
       void markVideo();
+      return;
     }
+    const p = playerRef.current;
+    if (!p) return;
+    void (async () => {
+      try {
+        const t = await p.getCurrentTime();
+        const d = await p.getDuration();
+        if (Number.isNaN(t) || Number.isNaN(d) || d <= 0) return;
+        if (t > maxPositionRef.current) maxPositionRef.current = t;
+        if (maxPositionRef.current / d >= 0.9) void markVideo();
+      } catch {
+        // ignore
+      }
+    })();
   }
 
   async function submitQuiz() {
@@ -148,7 +176,7 @@ export function TrainingModuleRunner({ initial }: TrainingModuleRunnerProps) {
     if (!selected.quiz?.questions.length) return;
     const p = progMap.get(selected.id);
     if (selected.kind === 'video' && selected.quiz) {
-      if (!p?.videoCompletedAt) {
+      if (!p?.videoCompletedAt || p.contentVersion !== selected.contentVersion) {
         setQuizMessage('Watch at least 90% of the video before submitting the quiz.');
         return;
       }
@@ -217,11 +245,16 @@ export function TrainingModuleRunner({ initial }: TrainingModuleRunnerProps) {
                   >
                     <span className="text-xs text-gray-400">{i + 1}. </span>
                     {s.title}
+                    {s.isOptional && (
+                      <span className="ml-1 text-xs font-normal text-indigo-600">(optional)</span>
+                    )}
                     <span className="mt-0.5 block text-xs">
                       {done ? (
                         <span className="font-medium text-emerald-600">✓ Cleared</span>
+                      ) : s.isOptional ? (
+                        <span className="text-indigo-600">○ Optional</span>
                       ) : (
-                        <span className="text-gray-500">○ Up next</span>
+                        <span className="text-gray-500">○ Required</span>
                       )}
                     </span>
                   </button>
@@ -253,9 +286,9 @@ export function TrainingModuleRunner({ initial }: TrainingModuleRunnerProps) {
                     playerVars: { modestbranding: 1, rel: 0 },
                   }}
                   onReady={(e) => {
+                    playerRef.current = e.target;
                     setPlayer(e.target);
-                    setWatched(0);
-                    setDuration(0);
+                    maxPositionRef.current = 0;
                   }}
                   onStateChange={onStateChange}
                 />

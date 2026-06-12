@@ -34,6 +34,8 @@ export interface TrainingSection {
   contentVersion: number;
   summary?: string | null;
   estimatedMinutes?: number | null;
+  /** When true, section is visible but not required for program completion. */
+  isOptional: boolean;
   createdAt: string;
   updatedAt?: string | null;
 }

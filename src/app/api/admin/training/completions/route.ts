@@ -4,7 +4,11 @@ import { authOptions } from '@/lib/auth-options';
 import { isApprovedAdmin } from '@/lib/approved-admins';
 import { getSupabase } from '@/lib/supabase-server';
 import { listModules, listSectionsForModule } from '@/lib/training-store';
-import { isSectionSatisfied, type SectionProgressRow } from '@/lib/training-progress';
+import {
+  isSectionRequired,
+  isSectionSatisfied,
+  type SectionProgressRow,
+} from '@/lib/training-progress';
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -20,6 +24,7 @@ export async function GET() {
 
   for (const m of modules) {
     const sections = await listSectionsForModule(m.id);
+    const requiredSections = sections.filter(isSectionRequired);
     const sectionIds = sections.map((s) => s.id);
     if (sectionIds.length === 0) {
       payload.push({
@@ -48,7 +53,7 @@ export async function GET() {
     for (const uid of userIds) {
       let done = 0;
       let lastActivity: string | null = null;
-      for (const s of sections) {
+      for (const s of requiredSections) {
         const row = (progRows ?? []).find(
           (r) => r.user_id === uid && r.section_id === s.id
         );
@@ -73,7 +78,7 @@ export async function GET() {
         userEmail: uid.includes('@') ? uid : '',
         userName: '',
         completedCount: done,
-        totalVideos: sections.length,
+        totalVideos: requiredSections.length,
         lastCompletedAt: lastActivity,
       });
     }
