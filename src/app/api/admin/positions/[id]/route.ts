@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getPositionById, updatePosition } from '@/lib/onboarding-positions';
 
+export const dynamic = 'force-dynamic';
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }

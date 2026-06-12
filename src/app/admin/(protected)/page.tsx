@@ -19,7 +19,9 @@ export default function AdminGeneratePage() {
 
   useEffect(() => {
     setLoadingPositions(true);
-    fetch(`/api/admin/positions?state=${encodeURIComponent(state)}&activeOnly=1`)
+    fetch(`/api/admin/positions?state=${encodeURIComponent(state)}&activeOnly=1`, {
+      cache: 'no-store',
+    })
       .then((r) => r.json())
       .then((data) => {
         const rows: PositionRow[] = (data.positions ?? []).map(

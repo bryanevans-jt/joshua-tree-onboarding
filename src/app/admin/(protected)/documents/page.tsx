@@ -26,6 +26,17 @@ interface PositionRow {
   active: boolean;
 }
 
+function normalizePosition(raw: Record<string, unknown>): PositionRow {
+  return {
+    id: String(raw.id),
+    state: raw.state as State,
+    label: String(raw.label),
+    slug: String(raw.slug),
+    sortOrder: Number(raw.sortOrder ?? raw.sort_order ?? 0),
+    active: raw.active !== false,
+  };
+}
+
 function templateKeysForPosition(p: PositionRow): string[] {
   return [jobTemplateKey(p.state, p.slug), legacyJobTemplateKey(p.slug)];
 }
@@ -59,12 +70,15 @@ export default function AdminDocumentsPage() {
 
   const loadList = useCallback(() => {
     setLoading(true);
-    fetch('/api/admin/documents')
+    fetch('/api/admin/documents', { cache: 'no-store' })
       .then((r) => r.json())
       .then((data) => {
         setUploaded(new Set(data.uploaded ?? []));
         setFileNames(data.filenames ?? {});
-        setPositions(data.positions ?? []);
+        const rows = Array.isArray(data.positions)
+          ? data.positions.map((p: Record<string, unknown>) => normalizePosition(p))
+          : [];
+        setPositions(rows);
       })
       .catch(() => setMessage({ type: 'error', text: 'Failed to load document list' }))
       .finally(() => setLoading(false));
@@ -149,6 +163,13 @@ export default function AdminDocumentsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to add position');
       setNewLabel('');
+      if (data.position) {
+        const added = normalizePosition(data.position as Record<string, unknown>);
+        setPositions((prev) => {
+          if (prev.some((p) => p.id === added.id)) return prev;
+          return [...prev, added];
+        });
+      }
       setMessage({ type: 'success', text: 'Position added.' });
       loadList();
     } catch (e) {

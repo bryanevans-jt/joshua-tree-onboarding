@@ -6,6 +6,8 @@ import {
   type OnboardingPosition,
 } from '@/lib/onboarding-positions';
 
+export const dynamic = 'force-dynamic';
+
 function isState(value: string): value is State {
   return (STATES as readonly string[]).includes(value);
 }

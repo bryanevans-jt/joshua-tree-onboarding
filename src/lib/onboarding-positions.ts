@@ -139,11 +139,7 @@ export async function listPositions(
 ): Promise<OnboardingPosition[]> {
   const activeOnly = opts?.activeOnly ?? false;
   if (hasSupabase()) {
-    try {
-      return await listPositionsSupabase(state, activeOnly);
-    } catch (e) {
-      console.warn('[onboarding-positions] Supabase query failed, using file fallback:', e);
-    }
+    return listPositionsSupabase(state, activeOnly);
   }
   return listPositionsFile(state, activeOnly);
 }
@@ -178,11 +174,7 @@ function getPositionByIdFile(id: string): OnboardingPosition | undefined {
 
 export async function getPositionById(id: string): Promise<OnboardingPosition | undefined> {
   if (hasSupabase()) {
-    try {
-      return await getPositionByIdSupabase(id);
-    } catch {
-      // fall through
-    }
+    return getPositionByIdSupabase(id);
   }
   return getPositionByIdFile(id);
 }

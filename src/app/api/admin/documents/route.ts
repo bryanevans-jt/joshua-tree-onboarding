@@ -9,6 +9,8 @@ import {
 import { legacyJobTemplateKey } from '@/lib/config';
 import { listAllPositions } from '@/lib/onboarding-positions';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const positions = await listAllPositions();
