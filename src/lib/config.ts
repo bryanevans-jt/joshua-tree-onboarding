@@ -6,6 +6,7 @@
 export const STATES = ['Georgia', 'Tennessee'] as const;
 export type State = (typeof STATES)[number];
 
+/** @deprecated Use DB positions per state; kept for legacy references. */
 export const POSITIONS = [
   'Employment Specialist',
   'Transition Instructor',
@@ -13,7 +14,32 @@ export const POSITIONS = [
   'Transition Supervisor',
   'Community Relations Specialist',
 ] as const;
-export type Position = (typeof POSITIONS)[number];
+
+export function stateCode(state: State): 'ga' | 'tn' {
+  return state === 'Georgia' ? 'ga' : 'tn';
+}
+
+export function slugFromLabel(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9_]/g, '');
+}
+
+/** Per-state job description template key (e.g. job_ga_employment_specialist). */
+export function jobTemplateKey(state: State, slug: string): string {
+  return `job_${stateCode(state)}_${slug}`;
+}
+
+/** Legacy global job key before per-state templates (e.g. job_employment_specialist). */
+export function legacyJobTemplateKey(labelOrSlug: string): string {
+  const slug = labelOrSlug.includes(' ') ? slugFromLabel(labelOrSlug) : labelOrSlug;
+  return `job_${slug}`;
+}
+
+export function positionToJobKey(position: string): string {
+  return legacyJobTemplateKey(position);
+}
 
 /** Document types that require a signature from the new hire */
 export const DOCUMENT_TYPES = {
@@ -46,10 +72,3 @@ export const DEFAULT_SIGNATURE_BOX = {
   yOffsetFromBottom: 80,
 };
 
-export function positionToJobKey(position: string): string {
-  const slug = position
-    .toLowerCase()
-    .replace(/\s+/g, '_')
-    .replace(/[^a-z0-9_]/g, '');
-  return `job_${slug}`;
-}

@@ -4,7 +4,7 @@
  */
 
 import type { OnboardingLink, AppSettings, OnboardingProgressData } from './types';
-import type { State, Position } from './config';
+import type { State } from './config';
 import { hasSupabase } from './supabase-server';
 import * as supabaseStore from './store-supabase';
 
@@ -57,7 +57,7 @@ function saveStore() {
 
 loadStore();
 
-function createLinkFile(state: State, position: Position): OnboardingLink {
+function createLinkFile(state: State, position: string): OnboardingLink {
   const id = randomUUID();
   const token = randomUUID().replace(/-/g, '').slice(0, 24);
   const link: OnboardingLink = {
@@ -72,7 +72,7 @@ function createLinkFile(state: State, position: Position): OnboardingLink {
   return link;
 }
 
-export async function createLink(state: State, position: Position): Promise<OnboardingLink> {
+export async function createLink(state: State, position: string): Promise<OnboardingLink> {
   if (hasSupabase()) return supabaseStore.createLink(state, position);
   return Promise.resolve(createLinkFile(state, position));
 }

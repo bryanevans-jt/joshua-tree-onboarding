@@ -1,15 +1,27 @@
 import { NextResponse } from 'next/server';
 import { createLink } from '@/lib/store';
-import type { State, Position } from '@/lib/config';
+import { STATES, type State } from '@/lib/config';
+import { isActivePositionForState } from '@/lib/onboarding-positions';
+
+function isState(value: string): value is State {
+  return (STATES as readonly string[]).includes(value);
+}
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const state = body.state as State;
-    const position = body.position as Position;
-    if (!state || !position) {
+    const position = (body.position as string)?.trim();
+    if (!state || !position || !isState(state)) {
       return NextResponse.json(
         { error: 'state and position are required' },
+        { status: 400 }
+      );
+    }
+    const valid = await isActivePositionForState(state, position);
+    if (!valid) {
+      return NextResponse.json(
+        { error: 'Invalid or inactive position for this state' },
         { status: 400 }
       );
     }

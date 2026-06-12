@@ -2,24 +2,18 @@ import { NextResponse } from 'next/server';
 import {
   saveTemplate,
   setTemplateFilename,
-  positionToJobKey,
   SHARED_KEYS,
 } from '@/lib/template-storage';
-import { POSITIONS } from '@/lib/config';
+import { getPositionById, templateKeyForPosition } from '@/lib/onboarding-positions';
 
 const MAX_SIZE = 20 * 1024 * 1024; // 20 MB
-
-const VALID_KEYS = new Set<string>([
-  ...SHARED_KEYS,
-  ...POSITIONS.map((p) => positionToJobKey(p)),
-]);
 
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
     const key = (formData.get('key') as string)?.trim() || null;
-    const position = (formData.get('position') as string)?.trim() || null;
+    const positionId = (formData.get('positionId') as string)?.trim() || null;
 
     if (!file || file.size === 0) {
       return NextResponse.json(
@@ -41,18 +35,15 @@ export async function POST(request: Request) {
     }
 
     let templateKey: string;
-    if (key === 'job_description' && position) {
-      templateKey = positionToJobKey(position);
+    if (key === 'job_description' && positionId) {
+      const position = await getPositionById(positionId);
+      if (!position) {
+        return NextResponse.json({ error: 'Position not found' }, { status: 400 });
+      }
+      templateKey = templateKeyForPosition(position);
     } else if (key && (SHARED_KEYS as readonly string[]).includes(key)) {
       templateKey = key;
     } else {
-      return NextResponse.json(
-        { error: 'Invalid key or position' },
-        { status: 400 }
-      );
-    }
-
-    if (!VALID_KEYS.has(templateKey)) {
       return NextResponse.json(
         { error: 'Invalid key or position' },
         { status: 400 }

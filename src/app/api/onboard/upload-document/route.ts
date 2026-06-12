@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getLinkByToken, saveProgress } from '@/lib/store';
+import { normalizeUploadToLetterPdf } from '@/lib/onboarding-normalize-upload';
 import { uploadDocument, ensureBucket } from '@/lib/onboarding-upload-storage';
 
 const ALLOWED_STEPS = new Set([
@@ -66,8 +67,22 @@ export async function POST(request: Request) {
     }
 
     const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    const mimeType = file.type || 'application/octet-stream';
+    let buffer: Buffer = Buffer.from(bytes);
+    let mimeType = file.type || 'application/octet-stream';
+
+    if (stepId !== 'headshot') {
+      try {
+        const normalized = await normalizeUploadToLetterPdf(buffer, mimeType, file.name || '');
+        buffer = Buffer.from(normalized);
+        mimeType = 'application/pdf';
+      } catch (normErr) {
+        console.error('[onboard/upload-document] normalize failed:', normErr);
+        return NextResponse.json(
+          { error: 'Could not process this file. Please upload a clear PDF or image.' },
+          { status: 400 }
+        );
+      }
+    }
 
     await ensureBucket();
     const key = await uploadDocument(link.id, stepId, buffer, mimeType);

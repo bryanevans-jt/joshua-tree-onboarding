@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import { getLinkByToken } from '@/lib/store';
-import { readTemplate, getTemplateFilename } from '@/lib/template-storage';
-import { positionToJobKey, FINGERPRINT_FORM_BY_STATE } from '@/lib/config';
+import { readTemplate, getTemplateFilename, resolveJobTemplateKey } from '@/lib/template-storage';
+import { FINGERPRINT_FORM_BY_STATE } from '@/lib/config';
 import type { State } from '@/lib/config';
 
-const STEP_TO_TEMPLATE: Record<string, (state: State, position: string) => string> = {
-  job_description: (_state, position) => positionToJobKey(position),
+const STEP_TO_TEMPLATE: Record<string, (state: State, position: string) => string | Promise<string>> = {
+  job_description: (state, position) => resolveJobTemplateKey(state, position),
   policy_manual: () => 'policy_manual',
   w4: () => 'w4',
   g4: () => 'g4',
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
   if (!getKey) {
     return NextResponse.json({ error: 'Unknown step' }, { status: 400 });
   }
-  const templateKey = getKey(link.state as State, link.position);
+  const templateKey = await getKey(link.state as State, link.position);
   const buf = await readTemplate(templateKey);
   if (!buf) {
     return NextResponse.json({ error: 'Template not found' }, { status: 404 });

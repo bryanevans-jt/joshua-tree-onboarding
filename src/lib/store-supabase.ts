@@ -3,7 +3,7 @@
  */
 
 import type { OnboardingLink, AppSettings, OnboardingProgressData } from './types';
-import type { State, Position } from './config';
+import type { State } from './config';
 import { getSupabase } from './supabase-server';
 import { randomUUID } from 'crypto';
 
@@ -21,7 +21,7 @@ function rowToLink(row: {
     id: row.id,
     token: row.token,
     state: row.state as State,
-    position: row.position as Position,
+    position: row.position,
     createdAt: row.created_at,
     completedAt: row.completed_at ?? undefined,
     newHireName: row.new_hire_name ?? undefined,
@@ -29,7 +29,7 @@ function rowToLink(row: {
   };
 }
 
-export async function createLink(state: State, position: Position): Promise<OnboardingLink> {
+export async function createLink(state: State, position: string): Promise<OnboardingLink> {
   const supabase = getSupabase();
   const id = randomUUID();
   const token = randomUUID().replace(/-/g, '').slice(0, 24);

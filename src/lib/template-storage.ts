@@ -5,7 +5,13 @@
 import fs from 'fs';
 import path from 'path';
 import { hasSupabase, getSupabase } from './supabase-server';
-import { positionToJobKey as positionToJobKeyFromConfig } from './config';
+import {
+  jobTemplateKey,
+  legacyJobTemplateKey,
+  slugFromLabel,
+  positionToJobKey as positionToJobKeyFromConfig,
+  type State,
+} from './config';
 
 const TEMPLATES_BUCKET = 'templates';
 const TEMPLATES_DIR = path.join(process.cwd(), 'data', 'templates');
@@ -33,10 +39,27 @@ export function getTemplateKey(key: string, position?: string): string {
   return key;
 }
 
-export function getAllTemplateKeys(positions: string[]): string[] {
-  const keys: string[] = [...SHARED_KEYS];
-  positions.forEach((p) => keys.push(positionToJobKey(p)));
-  return keys;
+export function getAllTemplateKeys(jobKeys: string[]): string[] {
+  return [...SHARED_KEYS, ...jobKeys];
+}
+
+export function jobKeysFromPositions(
+  positions: Array<{ state: State; slug: string }>
+): string[] {
+  return positions.map((p) => jobTemplateKey(p.state, p.slug));
+}
+
+/** Resolve job description template: per-state key first, then legacy global key. */
+export async function resolveJobTemplateKey(
+  state: State,
+  positionLabel: string
+): Promise<string> {
+  const slug = slugFromLabel(positionLabel);
+  const stateKey = jobTemplateKey(state, slug);
+  if (await hasTemplate(stateKey)) return stateKey;
+  const legacyKey = legacyJobTemplateKey(positionLabel);
+  if (await hasTemplate(legacyKey)) return legacyKey;
+  return stateKey;
 }
 
 function getTemplatePath(key: string): string {
@@ -77,11 +100,11 @@ async function hasTemplateSupabase(key: string): Promise<boolean> {
   return !error;
 }
 
-async function listUploadedTemplatesSupabase(positions: string[]): Promise<string[]> {
+async function listUploadedTemplatesSupabase(jobKeys: string[]): Promise<string[]> {
   // Some Supabase storage deployments can be eventually-consistent for list()
   // right after an upload. To make the admin UI immediately reflect new uploads,
   // verify existence for each expected template key instead of relying on list().
-  const keys = getAllTemplateKeys(positions);
+  const keys = getAllTemplateKeys(jobKeys);
   const uploaded: string[] = [];
   for (const k of keys) {
     // eslint-disable-next-line no-await-in-loop
@@ -114,9 +137,9 @@ function hasTemplateFile(key: string): boolean {
   return fs.existsSync(getTemplatePath(key));
 }
 
-function listUploadedTemplatesFile(positions: string[]): string[] {
+function listUploadedTemplatesFile(jobKeys: string[]): string[] {
   ensureDir();
-  const keys = getAllTemplateKeys(positions);
+  const keys = getAllTemplateKeys(jobKeys);
   return keys.filter((key) => hasTemplateFile(key));
 }
 
@@ -137,9 +160,41 @@ export async function hasTemplate(key: string): Promise<boolean> {
   return Promise.resolve(hasTemplateFile(key));
 }
 
-export async function listUploadedTemplates(positions: string[]): Promise<string[]> {
-  if (hasSupabase()) return listUploadedTemplatesSupabase(positions);
-  return Promise.resolve(listUploadedTemplatesFile(positions));
+export async function listUploadedTemplates(jobKeys: string[]): Promise<string[]> {
+  if (hasSupabase()) return listUploadedTemplatesSupabase(jobKeys);
+  return Promise.resolve(listUploadedTemplatesFile(jobKeys));
+}
+
+async function deleteTemplateSupabase(key: string): Promise<void> {
+  const supabase = getSupabase();
+  const filePath = `${key}.pdf`;
+  await supabase.storage.from(TEMPLATES_BUCKET).remove([filePath]);
+}
+
+function deleteTemplateFile(key: string): void {
+  const filePath = getTemplatePath(key);
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+}
+
+export async function deleteTemplate(key: string): Promise<void> {
+  if (hasSupabase()) await deleteTemplateSupabase(key);
+  else deleteTemplateFile(key);
+  const all = hasSupabase() ? await readFilenamesSupabase() : readFilenamesFile();
+  if (all[key]) {
+    delete all[key];
+    if (hasSupabase()) await writeFilenamesSupabase(all);
+    else writeFilenamesFile(all);
+  }
+}
+
+export async function migrateTemplateKey(oldKey: string, newKey: string): Promise<void> {
+  if (oldKey === newKey) return;
+  const buf = await readTemplate(oldKey);
+  if (!buf) return;
+  await saveTemplate(newKey, buf);
+  const filename = await getTemplateFilename(oldKey);
+  if (filename) await setTemplateFilename(newKey, filename);
+  await deleteTemplate(oldKey);
 }
 
 // ---------- Original filenames (as uploaded in admin) ----------

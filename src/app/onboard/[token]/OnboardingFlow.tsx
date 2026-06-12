@@ -201,7 +201,7 @@ export function OnboardingFlow({ token, state, position }: OnboardingFlowProps) 
         Download each document where provided, complete and sign it, then upload it here. Your progress is saved so you can return later.
       </p>
       <div className="rounded-lg border border-gray-200 bg-amber-50/80 px-4 py-3 text-sm text-gray-700">
-        <strong>Accepted file types:</strong> Documents (W-4, I-9, Policy Manual, etc.) and uploads (Driver&apos;s license, SSN/birth certificate) — <strong>PDF, JPG, or PNG</strong>. Headshot photo — <strong>JPG or PNG only</strong>.
+        <strong>Accepted file types:</strong> Documents and ID uploads — <strong>PDF, JPG, or PNG</strong> (saved as letter-sized PDF). Headshot — <strong>JPG or PNG only</strong>.
       </div>
 
       <div className="card">

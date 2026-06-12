@@ -1,4 +1,4 @@
-import type { State, Position } from './config';
+import type { State } from './config';
 
 /** Progress saved as the new hire completes each item (before final submit) */
 export interface OnboardingProgressData {
@@ -19,7 +19,7 @@ export interface OnboardingLink {
   id: string;
   token: string;
   state: State;
-  position: Position;
+  position: string;
   createdAt: string;
   expiresAt?: string;
   completedAt?: string;
@@ -51,7 +51,7 @@ export interface DocumentTemplate {
 }
 
 export interface JobDescriptionTemplate {
-  position: Position;
+  position: string;
   state: State;
   filePath?: string;
   signatureBoxes?: Array<{ pageIndex: number; x: number; y: number; width: number; height: number }>;

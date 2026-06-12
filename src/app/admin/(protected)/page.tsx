@@ -1,18 +1,47 @@
 'use client';
 
-import { useState } from 'react';
-import { STATES, POSITIONS } from '@/lib/config';
-import type { State, Position } from '@/lib/config';
+import { useState, useEffect } from 'react';
+import { STATES } from '@/lib/config';
+import type { State } from '@/lib/config';
+
+interface PositionRow {
+  id: string;
+  label: string;
+}
 
 export default function AdminGeneratePage() {
   const [state, setState] = useState<State>('Georgia');
-  const [position, setPosition] = useState<Position>(POSITIONS[0]);
+  const [positions, setPositions] = useState<PositionRow[]>([]);
+  const [position, setPosition] = useState('');
   const [generatedLink, setGeneratedLink] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadingPositions, setLoadingPositions] = useState(true);
+
+  useEffect(() => {
+    setLoadingPositions(true);
+    fetch(`/api/admin/positions?state=${encodeURIComponent(state)}&activeOnly=1`)
+      .then((r) => r.json())
+      .then((data) => {
+        const rows: PositionRow[] = (data.positions ?? []).map(
+          (p: { id: string; label: string }) => ({ id: p.id, label: p.label })
+        );
+        setPositions(rows);
+        setPosition((prev) => {
+          if (rows.some((r) => r.label === prev)) return prev;
+          return rows[0]?.label ?? '';
+        });
+      })
+      .catch(() => setError('Failed to load positions'))
+      .finally(() => setLoadingPositions(false));
+  }, [state]);
 
   async function handleGenerate() {
     setError(null);
     setGeneratedLink(null);
+    if (!position) {
+      setError('Select a position');
+      return;
+    }
     try {
       const res = await fetch('/api/admin/generate-link', {
         method: 'POST',
@@ -54,17 +83,28 @@ export default function AdminGeneratePage() {
           </label>
           <select
             value={position}
-            onChange={(e) => setPosition(e.target.value as Position)}
+            onChange={(e) => setPosition(e.target.value)}
             className="input-field"
+            disabled={loadingPositions || positions.length === 0}
           >
-            {POSITIONS.map((p) => (
-              <option key={p} value={p}>
-                {p}
+            {positions.map((p) => (
+              <option key={p.id} value={p.label}>
+                {p.label}
               </option>
             ))}
           </select>
+          {!loadingPositions && positions.length === 0 && (
+            <p className="mt-1 text-sm text-amber-600">
+              No active positions for this state. Add positions under Documents.
+            </p>
+          )}
         </div>
-        <button type="button" onClick={handleGenerate} className="btn-primary">
+        <button
+          type="button"
+          onClick={handleGenerate}
+          className="btn-primary"
+          disabled={loadingPositions || !position}
+        >
           Generate link
         </button>
       </div>

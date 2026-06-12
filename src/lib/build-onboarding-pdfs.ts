@@ -3,7 +3,7 @@
  * image documents (driver's license, SSN/birth cert) as one-page PDFs.
  */
 
-import { readTemplate, positionToJobKey } from './template-storage';
+import { readTemplate, resolveJobTemplateKey } from './template-storage';
 import { FINGERPRINT_FORM_BY_STATE } from './config';
 import type { State } from './config';
 import {
@@ -21,8 +21,11 @@ export interface Attachment {
 }
 
 /** Step id (onboarding flow) -> template key (storage). Signature steps only. */
-const SIGNED_STEP_TO_TEMPLATE_KEY: Record<string, (state: State, position: string) => string> = {
-  job_description: (_state, position) => positionToJobKey(position),
+const SIGNED_STEP_TO_TEMPLATE_KEY: Record<
+  string,
+  (state: State, position: string) => string | Promise<string>
+> = {
+  job_description: (state, position) => resolveJobTemplateKey(state, position),
   policy_manual: () => 'policy_manual',
   w4: () => 'w4',
   g4: () => 'g4',
@@ -58,7 +61,7 @@ export async function buildHrAttachments(inputs: BuildPdfInputs): Promise<Attach
 
   for (const [stepId, getTemplateKey] of Object.entries(SIGNED_STEP_TO_TEMPLATE_KEY)) {
     const sig = signatures[stepId];
-    const templateKey = getTemplateKey(state as State, position);
+    const templateKey = await getTemplateKey(state as State, position);
     const templateBuf = await readTemplate(templateKey);
     if (!templateBuf || !sig) continue;
 
